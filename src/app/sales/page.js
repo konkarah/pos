@@ -12,25 +12,33 @@ export default function SalesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterLocation, setFilterLocation] = useState('');
   const [locations, setLocations] = useState([]);
+  const [page, setPage] = useState(1);
+const [limit] = useState(10);
+const [meta, setMeta] = useState(null);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [page]);
 
   const fetchData = async () => {
-    try {
-      const [salesRes, locationsRes] = await Promise.all([
-        api.get('/sales'),
-        api.get('/locations')
-      ]);
-      setSales(salesRes.data);
-      setLocations(locationsRes.data);
-    } catch (error) {
-      toast.error('Failed to load sales data');
-    } finally {
-      setLoading(false);
-    }
-  };
+  try {
+    setLoading(true);
+
+    const [salesRes, locationsRes] = await Promise.all([
+      api.get(`/sales?page=${page}&limit=${limit}`),
+      api.get('/locations')
+    ]);
+
+    setSales(salesRes.data.data);
+    setMeta(salesRes.data.meta);
+    setLocations(locationsRes.data);
+
+  } catch (error) {
+    toast.error('Failed to load sales data');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const filteredSales = sales.filter(sale => {
     const matchesSearch = 
@@ -182,6 +190,27 @@ export default function SalesPage() {
               )}
             </tbody>
           </table>
+          <div className="flex justify-between items-center mt-4">
+  <button
+    disabled={page === 1}
+    onClick={() => setPage(prev => prev - 1)}
+    className="px-4 py-2 bg-gray-200 rounded disabled:opacity-50"
+  >
+    Previous
+  </button>
+
+  <span className="text-sm text-gray-600">
+    Page {meta?.page} of {meta?.lastPage}
+  </span>
+
+  <button
+    disabled={page === meta?.lastPage}
+    onClick={() => setPage(prev => prev + 1)}
+    className="px-4 py-2 bg-gray-200 rounded disabled:opacity-50"
+  >
+    Next
+  </button>
+</div>
         </div>
       </div>
     </div>
