@@ -29,7 +29,7 @@ const [meta, setMeta] = useState(null);
       api.get('/locations')
     ]);
 
-    setSales(salesRes.data.data);
+    setSales(Array.isArray(salesRes.data.data) ? salesRes.data.data : []);
     setMeta(salesRes.data.meta);
     setLocations(locationsRes.data);
 
