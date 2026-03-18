@@ -14,25 +14,36 @@ export default function ReportsPage() {
   const [reportData, setReportData] = useState(null);
   const [locations, setLocations] = useState([]);
   const [selectedLocation, setSelectedLocation] = useState('');
+  const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
     fetchLocations();
   }, []);
 
   useEffect(() => {
-    if (locations.length > 0) {
+    if (initialized) {
       fetchReport();
     }
-  }, [activeTab, period, selectedLocation]);
+  }, [activeTab, period, selectedLocation, initialized]);
 
+  // const fetchLocations = async () => {
+  //   try {
+  //     const res = await api.get('/locations');
+  //     setLocations(res.data);
+  //     fetchReport(); // Fetch report after locations are loaded
+  //   } catch (error) {
+  //     console.error('Failed to load locations');
+  //   }
+  // };
   const fetchLocations = async () => {
-    try {
-      const res = await api.get('/locations');
-      setLocations(res.data);
-    } catch (error) {
-      console.error('Failed to load locations');
-    }
-  };
+  try {
+    const res = await api.get('/locations');
+    setLocations(res.data);
+    setInitialized(true); // ✅ mark ready
+  } catch (error) {
+    console.error('Failed to load locations');
+  }
+};
 
   const fetchReport = async () => {
     setLoading(true);
