@@ -72,11 +72,11 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="mt-6 p-4 bg-gray-50 rounded-lg text-sm">
+        {/* <div className="mt-6 p-4 bg-gray-50 rounded-lg text-sm">
           <p className="font-medium text-gray-700 mb-2">Demo Credentials:</p>
           <p className="text-gray-600">Admin: admin / admin123</p>
           <p className="text-gray-600">Employee: employee / employee123</p>
-        </div>
+        </div> */}
       </div>
     </div>
   );
