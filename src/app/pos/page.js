@@ -27,45 +27,81 @@ export default function POSPage() {
   const [processing, setProcessing] = useState(false);
    const [saleDate, setSaleDate] = useState(''); 
 
-  useEffect(() => {
-    fetchData();
-    // Set default date to current local time formatted for datetime-local input
-    const now = new Date();
-    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-    setSaleDate(now.toISOString().slice(0, 16)); 
-  }, []);
+// 1. init
+useEffect(() => {
+  const now = new Date();
+  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+  setSaleDate(now.toISOString().slice(0, 16)); 
+}, []);
 
-const fetchData = async () => {
+// 2. reactive fetch
+useEffect(() => {
+  const delay = setTimeout(() => {
+    fetchData();
+  }, 300);
+
+  return () => clearTimeout(delay);
+}, [searchQuery, selectedLocation]);
+
+  const fetchData = async () => {
   try {
     const [productsRes, locationsRes] = await Promise.all([
-      api.get('/products?page=1&limit=1000'), // fetch all products for POS
+      api.get(
+        `/products?search=${searchQuery}&page=1&limit=20&locationId=${selectedLocation}`
+      ),
       api.get('/locations')
     ]);
 
-    setProducts(Array.isArray(productsRes.data.data) ? productsRes.data.data : []);
+    setProducts(
+      Array.isArray(productsRes.data.data)
+        ? productsRes.data.data
+        : []
+    );
+
     setLocations(locationsRes.data);
 
-    if (locationsRes.data.length > 0) {
+    // only set location once (avoid infinite refetch)
+    if (!selectedLocation && locationsRes.data.length > 0) {
       setSelectedLocation(locationsRes.data[0].id);
     }
+
   } catch (error) {
     toast.error('Failed to load data');
     console.error(error);
   }
 };
 
-  const filteredProducts = products.filter(product => {
-    const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         product.sku.toLowerCase().includes(searchQuery.toLowerCase());
+// const fetchData = async () => {
+//   try {
+//     const [productsRes, locationsRes] = await Promise.all([
+//       api.get(`/products?search=${searchQuery}&page=1&limit=20&locationId=${selectedLocation}`), // fetch all products for POS
+//       api.get('/locations')
+//     ]);
+
+//     setProducts(Array.isArray(productsRes.data.data) ? productsRes.data.data : []);
+//     setLocations(locationsRes.data);
+
+//     if (locationsRes.data.length > 0) {
+//       setSelectedLocation(locationsRes.data[0].id);
+//     }
+//   } catch (error) {
+//     toast.error('Failed to load data');
+//     console.error(error);
+//   }
+// };
+
+  // const filteredProducts = products.filter(product => {
+  //   const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+  //                        product.sku.toLowerCase().includes(searchQuery.toLowerCase());
     
-    if (!selectedLocation) return matchesSearch;
+  //   if (!selectedLocation) return matchesSearch;
     
-    const hasStock = product.variants.some(v => 
-      v.locationId === selectedLocation && v.stockQuantity > 0
-    );
+  //   const hasStock = product.variants.some(v => 
+  //     v.locationId === selectedLocation && v.stockQuantity > 0
+  //   );
     
-    return matchesSearch && hasStock;
-  });
+  //   return matchesSearch && hasStock;
+  // });
 
   const addToCart = (product, variant) => {
     const existingItem = cart.find(item => item.variant.id === variant.id);
@@ -238,7 +274,7 @@ const fetchData = async () => {
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {filteredProducts.map(product => {
+                {products.map(product => {
                   const variant = product.variants.find(v => v.locationId === selectedLocation);
                   const inStock = variant && variant.stockQuantity > 0;
                   
