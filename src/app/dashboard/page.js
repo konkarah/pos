@@ -24,17 +24,25 @@ export default function Dashboard() {
 
   const fetchDashboardData = async () => {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      // const today = new Date().toISOString().split('T')[0];
+      const now = new Date();
+
+    const startOfDay = new Date(now);
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date(now);
+    endOfDay.setHours(23, 59, 59, 999);
       
       const [salesRes, productsRes] = await Promise.all([
-        api.get(`/sales?startDate=${today}&endDate=${today}`),
+        api.get(`/sales?startDate=${startOfDay.toISOString()}&endDate=${endOfDay.toISOString()}`),
         api.get('/products')
       ]);
 
-      const sales = salesRes.data;
+      const sales = Array.isArray(salesRes.data.data) ? salesRes.data.data : [];
       const products = productsRes.data;
 
-      const todayRevenue = sales.reduce((sum, sale) => sum + sale.totalAmount, 0);
+      // const todayRevenue = sales.reduce((sum, sale) => sum + sale.totalAmount, 0);
+      const todayRevenue = sales.reduce((sum, sale) => sum + (sale.totalAmount || 0), 0);
       
       // Count low stock items (less than 5)
       let lowStockCount = 0;
@@ -45,7 +53,7 @@ export default function Dashboard() {
       });
 
       setStats({
-        todaySales: sales.length,
+        todaySales: sales.length || 0,
         todayRevenue,
         lowStockItems: lowStockCount,
         totalProducts: products.length
