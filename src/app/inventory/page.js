@@ -25,6 +25,8 @@ export default function InventoryPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [page, setPage] = useState(1);
+const [totalPages, setTotalPages] = useState(1);
 
   useEffect(() => {
   const timeout = setTimeout(() => {
@@ -36,17 +38,22 @@ export default function InventoryPage() {
 
 useEffect(() => {
   fetchData();
-}, [debouncedSearch]);
+}, [debouncedSearch, page]);
 
 const fetchData = async () => {
+  setLoading(true);
   try {
-    const [productsRes, locationsRes, categoriesRes] = await Promise.all([
-      api.get(`/products?search=${debouncedSearch}`),
+    const [locationsRes, categoriesRes] = await Promise.all([
       api.get('/locations'),
       api.get('/categories')
     ]);
 
-    setProducts(Array.isArray(productsRes.data) ? productsRes.data : []);
+    const productsRes = await api.get(
+      `/products?search=${debouncedSearch}&page=${page}&limit=10`
+    );
+
+    setProducts(productsRes.data.data);
+    setTotalPages(productsRes.data.totalPages);
     setLocations(locationsRes.data);
     setCategories(categoriesRes.data);
   } catch (error) {
@@ -55,6 +62,24 @@ const fetchData = async () => {
     setLoading(false);
   }
 };
+
+// const fetchData = async () => {
+//   try {
+//     const [productsRes, locationsRes, categoriesRes] = await Promise.all([
+//       api.get(`/products?search=${debouncedSearch}`),
+//       api.get('/locations'),
+//       api.get('/categories')
+//     ]);
+
+//     setProducts(Array.isArray(productsRes.data) ? productsRes.data : []);
+//     setLocations(locationsRes.data);
+//     setCategories(categoriesRes.data);
+//   } catch (error) {
+//     toast.error('Failed to load data');
+//   } finally {
+//     setLoading(false);
+//   }
+// };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -203,6 +228,27 @@ const fetchData = async () => {
               ))}
             </tbody>
           </table>
+          <div className="flex justify-between items-center mt-4">
+  <button
+    onClick={() => setPage((p) => Math.max(p - 1, 1))}
+    disabled={page === 1}
+    className="btn-secondary"
+  >
+    Previous
+  </button>
+
+  <span>
+    Page {page} of {totalPages}
+  </span>
+
+  <button
+    onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
+    disabled={page === totalPages}
+    className="btn-secondary"
+  >
+    Next
+  </button>
+</div>
         </div>
 
         {/* Add/Edit Modal */}
