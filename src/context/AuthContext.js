@@ -11,26 +11,45 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  useEffect(() => {
+useEffect(() => {
+  const initAuth = async () => {
     const token = localStorage.getItem('token');
-    const userData = localStorage.getItem('user');
-    
-    if (token && userData) {
-      setUser(JSON.parse(userData));
-    }
-    setLoading(false);
-  }, []);
 
-  const login = async (username, password) => {
+    if (!token) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const res = await api.get('/auth/me'); // create this endpoint
+      setUser(res.data);
+    } catch (error) {
+      // invalid/expired token
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      setUser(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  initAuth();
+}, []);
+
+const login = async (username, password) => {
+  try {
     const response = await api.post('/auth/login', { username, password });
     const { token, user } = response.data;
-    
+
     localStorage.setItem('token', token);
     localStorage.setItem('user', JSON.stringify(user));
     setUser(user);
-    
+
     return user;
-  };
+  } catch (error) {
+    throw error.response?.data?.error || 'Login failed';
+  }
+};
 
   const logout = () => {
     localStorage.removeItem('token');
