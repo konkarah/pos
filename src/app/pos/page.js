@@ -3,22 +3,36 @@
 import { useState, useEffect } from 'react';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
-import { Search, Trash2, Phone } from 'lucide-react';
+import { Search, Trash2, Phone, Calendar } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 
 export default function POSPage() {
-  const [products, setProducts] = useState([]);
+  // const [products, setProducts] = useState([]);
+  // const [cart, setCart] = useState([]);
+  // const [searchQuery, setSearchQuery] = useState('');
+  // const [selectedLocation, setSelectedLocation] = useState('');
+  // const [locations, setLocations] = useState([]);
+  // const [customerName, setCustomerName] = useState('');
+  // const [customerPhone, setCustomerPhone] = useState(''); // NEW STATE
+  // const [paymentMethod, setPaymentMethod] = useState('CASH');
+  // const [processing, setProcessing] = useState(false);
+    const [products, setProducts] = useState([]);
   const [cart, setCart] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLocation, setSelectedLocation] = useState('');
   const [locations, setLocations] = useState([]);
   const [customerName, setCustomerName] = useState('');
-  const [customerPhone, setCustomerPhone] = useState(''); // NEW STATE
+  const [customerPhone, setCustomerPhone] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [processing, setProcessing] = useState(false);
+   const [saleDate, setSaleDate] = useState(''); 
 
   useEffect(() => {
     fetchData();
+    // Set default date to current local time formatted for datetime-local input
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    setSaleDate(now.toISOString().slice(0, 16)); 
   }, []);
 
   const fetchData = async () => {
@@ -122,7 +136,21 @@ export default function POSPage() {
       return;
     }
 
-    // Simple phone validation (optional: allow empty, but if present, check format)
+    if (!saleDate) {
+      toast.error('Please select a sale date');
+      return;
+    }
+
+    const selectedDateTime = new Date(saleDate);
+    const now = new Date();
+
+    // Optional: Prevent future dates (remove if you allow future scheduling)
+    if (selectedDateTime > now) {
+      toast.error('Sale date cannot be in the future');
+      return;
+    }
+
+    // Simple phone validation
     if (customerPhone && !/^\+?[0-9]{10,15}$/.test(customerPhone.replace(/\s|-/g, ''))) {
       toast.error('Please enter a valid phone number (10-15 digits)');
       return;
@@ -133,7 +161,8 @@ export default function POSPage() {
       const saleData = {
         locationId: selectedLocation,
         customerName: customerName || null,
-        customerPhone: customerPhone || null, // SEND PHONE NUMBER
+        customerPhone: customerPhone || null,
+        saleDate: selectedDateTime.toISOString(), // SEND SPECIFIC DATE
         totalAmount,
         paymentMethod,
         items: cart.map(item => ({
@@ -153,12 +182,18 @@ export default function POSPage() {
       link.download = `${response.data.sale.receiptNumber}.pdf`;
       link.click();
 
-      toast.success('Sale completed successfully!');
+      toast.success(`Sale recorded for ${selectedDateTime.toLocaleString()}!`);
       
-      // Reset form
+      // Reset form but keep location
       setCart([]);
       setCustomerName('');
-      setCustomerPhone(''); // Clear phone
+      setCustomerPhone('');
+      
+      // Reset date to now or keep the selected one? Usually reset to now.
+      const nowReset = new Date();
+      nowReset.setMinutes(nowReset.getMinutes() - nowReset.getTimezoneOffset());
+      setSaleDate(nowReset.toISOString().slice(0, 16));
+      
       fetchData();
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to process sale');
@@ -236,7 +271,7 @@ export default function POSPage() {
                 <p className="text-gray-500 text-center py-8">Cart is empty</p>
               ) : (
                 <>
-                  <div className="space-y-4 mb-4 max-h-80 overflow-y-auto">
+                  <div className="space-y-4 mb-4 max-h-60 overflow-y-auto">
                     {cart.map(item => {
                       const priceChanged = item.unitPrice !== item.product.sellPrice;
                       return (
@@ -281,7 +316,7 @@ export default function POSPage() {
                   </div>
 
                   <div className="border-t pt-4 space-y-3">
-                    {/* Customer Details Grid */}
+                    {/* Customer Details & Date Grid */}
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs font-medium text-gray-600 mb-1">Customer Name</label>
@@ -306,6 +341,21 @@ export default function POSPage() {
                           />
                         </div>
                       </div>
+                    </div>
+
+                    {/* NEW: Sale Date Input */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Sale Date & Time</label>
+                      <div className="relative">
+                        <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                        <input
+                          type="datetime-local"
+                          value={saleDate}
+                          onChange={(e) => setSaleDate(e.target.value)}
+                          className="input-field text-sm py-2 pl-9 w-full"
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">Defaults to now. Adjust for back-dating.</p>
                     </div>
 
                     <div>
