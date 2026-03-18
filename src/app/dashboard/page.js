@@ -22,48 +22,47 @@ export default function Dashboard() {
     fetchDashboardData();
   }, []);
 
-  const fetchDashboardData = async () => {
-    try {
-      // const today = new Date().toISOString().split('T')[0];
-      const now = new Date();
+const fetchDashboardData = async () => {
+  try {
+    const now = new Date();
 
     const startOfDay = new Date(now);
     startOfDay.setHours(0, 0, 0, 0);
 
     const endOfDay = new Date(now);
     endOfDay.setHours(23, 59, 59, 999);
-      
-      const [salesRes, productsRes] = await Promise.all([
-        api.get(`/sales?startDate=${startOfDay.toISOString()}&endDate=${endOfDay.toISOString()}`),
-        api.get('/products')
-      ]);
 
-      const sales = Array.isArray(salesRes.data.data) ? salesRes.data.data : [];
-      const products = productsRes.data;
+    const [salesRes, productsRes] = await Promise.all([
+      api.get(`/sales?startDate=${startOfDay.toISOString()}&endDate=${endOfDay.toISOString()}`),
+      api.get('/products?page=1&limit=1000') // fetch all products for dashboard stats
+    ]);
 
-      // const todayRevenue = sales.reduce((sum, sale) => sum + sale.totalAmount, 0);
-      const todayRevenue = sales.reduce((sum, sale) => sum + (sale.totalAmount || 0), 0);
-      
-      // Count low stock items (less than 5)
-      let lowStockCount = 0;
-      products.forEach(product => {
-        product.variants.forEach(variant => {
-          if (variant.stockQuantity < 5) lowStockCount++;
-        });
+    const sales = Array.isArray(salesRes.data.data) ? salesRes.data.data : [];
+    const products = Array.isArray(productsRes.data.data) ? productsRes.data.data : [];
+
+    const todayRevenue = sales.reduce((sum, sale) => sum + (sale.totalAmount || 0), 0);
+
+    // Count low stock items (less than 5)
+    let lowStockCount = 0;
+    products.forEach(product => {
+      product.variants.forEach(variant => {
+        if (variant.stockQuantity < 5) lowStockCount++;
       });
+    });
 
-      setStats({
-        todaySales: sales.length || 0,
-        todayRevenue,
-        lowStockItems: lowStockCount,
-        totalProducts: products.length
-      });
-    } catch (error) {
-      toast.error('Failed to load dashboard data');
-    } finally {
-      setLoading(false);
-    }
-  };
+    setStats({
+      todaySales: sales.length || 0,
+      todayRevenue,
+      lowStockItems: lowStockCount,
+      totalProducts: products.length
+    });
+  } catch (error) {
+    toast.error('Failed to load dashboard data');
+    console.error(error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const statCards = [
     {

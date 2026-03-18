@@ -35,21 +35,24 @@ export default function POSPage() {
     setSaleDate(now.toISOString().slice(0, 16)); 
   }, []);
 
-  const fetchData = async () => {
-    try {
-      const [productsRes, locationsRes] = await Promise.all([
-        api.get('/products'),
-        api.get('/locations')
-      ]);
-      setProducts(productsRes.data);
-      setLocations(locationsRes.data);
-      if (locationsRes.data.length > 0) {
-        setSelectedLocation(locationsRes.data[0].id);
-      }
-    } catch (error) {
-      toast.error('Failed to load data');
+const fetchData = async () => {
+  try {
+    const [productsRes, locationsRes] = await Promise.all([
+      api.get('/products?page=1&limit=1000'), // fetch all products for POS
+      api.get('/locations')
+    ]);
+
+    setProducts(Array.isArray(productsRes.data.data) ? productsRes.data.data : []);
+    setLocations(locationsRes.data);
+
+    if (locationsRes.data.length > 0) {
+      setSelectedLocation(locationsRes.data[0].id);
     }
-  };
+  } catch (error) {
+    toast.error('Failed to load data');
+    console.error(error);
+  }
+};
 
   const filteredProducts = products.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
