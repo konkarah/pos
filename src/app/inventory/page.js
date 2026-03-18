@@ -23,27 +23,38 @@ export default function InventoryPage() {
     variants: [{ locationId: '', stockQuantity: 0 }]
   });
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
 
   useEffect(() => {
-    fetchData();
-  }, []);
+  const timeout = setTimeout(() => {
+    setDebouncedSearch(searchQuery);
+  }, 300); // 400ms delay
 
-  const fetchData = async () => {
-    try {
-      const [productsRes, locationsRes, categoriesRes] = await Promise.all([
-        api.get('/products'),
-        api.get('/locations'),
-        api.get('/categories')
-      ]);
-      setProducts(productsRes.data);
-      setLocations(locationsRes.data);
-      setCategories(categoriesRes.data);
-    } catch (error) {
-      toast.error('Failed to load data');
-    } finally {
-      setLoading(false);
-    }
-  };
+  return () => clearTimeout(timeout);
+}, [searchQuery]);
+
+useEffect(() => {
+  fetchData();
+}, [debouncedSearch]);
+
+const fetchData = async () => {
+  try {
+    const [productsRes, locationsRes, categoriesRes] = await Promise.all([
+      api.get(`/products?search=${debouncedSearch}`),
+      api.get('/locations'),
+      api.get('/categories')
+    ]);
+
+    setProducts(Array.isArray(productsRes.data) ? productsRes.data : []);
+    setLocations(locationsRes.data);
+    setCategories(categoriesRes.data);
+  } catch (error) {
+    toast.error('Failed to load data');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -134,6 +145,15 @@ export default function InventoryPage() {
         </div>
 
         <div className="card overflow-x-auto">
+          <div className="mb-4">
+  <input
+    type="text"
+    placeholder="Search by name or SKU..."
+    value={searchQuery}
+    onChange={(e) => setSearchQuery(e.target.value)}
+    className="input-field w-full md:w-80"
+  />
+</div>
           <table className="w-full">
             <thead className="bg-gray-50 border-b">
               <tr>
