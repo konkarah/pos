@@ -15,6 +15,81 @@ export default function SalesPage() {
   const [page, setPage] = useState(1);
 const [limit] = useState(10);
 const [meta, setMeta] = useState(null);
+// Add these states to your SalesPage component
+const [editingSale, setEditingSale] = useState(null);
+const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+const [editForm, setEditForm] = useState({
+  customerName: '',
+  customerPhone: '',
+  paymentMethod: 'CASH',
+  totalAmount: 0,
+  saleDate: '',
+  items: []
+});
+
+
+
+// Open edit modal with sale data
+const openEditModal = (sale) => {
+  setEditingSale(sale);
+  setEditForm({
+    customerName: sale.customerName || '',
+    customerPhone: sale.customerPhone || '',
+    paymentMethod: sale.paymentMethod,
+    totalAmount: sale.totalAmount,
+    saleDate: new Date(sale.createdAt).toISOString().slice(0, 16), // datetime-local format
+    items: sale.items.map(item => ({
+      id: item.id,
+      productVariantId: item.productVariantId,
+      productName: item.productVariant.product.name,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      subtotal: item.subtotal
+    }))
+  });
+  setIsEditModalOpen(true);
+};
+
+// Handle form input changes
+const handleEditFormChange = (field, value) => {
+  setEditForm(prev => ({ ...prev, [field]: value }));
+};
+
+// Handle item quantity/price changes
+const handleItemChange = (index, field, value) => {
+  const newItems = [...editForm.items];
+  newItems[index] = { ...newItems[index], [field]: value };
+  
+  // Recalculate subtotal and total
+  newItems[index].subtotal = newItems[index].quantity * newItems[index].unitPrice;
+  const newTotal = newItems.reduce((sum, item) => sum + item.subtotal, 0);
+  
+  setEditForm(prev => ({
+    ...prev,
+    items: newItems,
+    totalAmount: newTotal
+  }));
+};
+
+// Submit updated sale
+const handleUpdateSale = async (e) => {
+  e.preventDefault();
+  
+  try {
+    const response = await api.put(`/sales/${editingSale.id}`, {
+      ...editForm,
+      items: editForm.items.map(({ id, ...item }) => item) // remove local id if needed
+    });
+    
+    toast.success('Sale updated successfully');
+    setIsEditModalOpen(false);
+    setEditingSale(null);
+    fetchData(); // Refresh the sales list
+  } catch (error) {
+    console.error('Update error:', error);
+    toast.error(error.response?.data?.error || 'Failed to update sale');
+  }
+};
 
   useEffect(() => {
     fetchData();
@@ -176,21 +251,35 @@ const [meta, setMeta] = useState(null);
                     <td className="px-4 py-3 font-bold text-gray-800">
                       {formatCurrency(sale.totalAmount)}
                     </td>
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => downloadReceipt(sale.id, sale.receiptNumber)}
-                        className="text-primary-600 hover:text-primary-800 flex items-center gap-1 text-sm"
-                      >
-                        <Download className="w-4 h-4" />
-                        Receipt
-                      </button>
-                    </td>
+<td className="px-4 py-3">
+  <div className="flex items-center gap-3">
+    <button
+      onClick={() => downloadReceipt(sale.id, sale.receiptNumber)}
+      className="text-primary-600 hover:text-primary-800 flex items-center gap-1 text-sm"
+    >
+      <Download className="w-4 h-4" />
+      Receipt
+    </button>
+    <button
+      onClick={() => openEditModal(sale)}
+      className="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-sm"
+      title="Edit Sale"
+    >
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+      </svg>
+      Edit
+    </button>
+  </div>
+</td>
                   </tr>
                 ))
               )}
             </tbody>
           </table>
           <div className="flex justify-between items-center mt-4">
+            
   <button
     disabled={page === 1}
     onClick={() => setPage(prev => prev - 1)}
@@ -214,6 +303,144 @@ const [meta, setMeta] = useState(null);
         </div>
       </div>
     </div>
+    {/* Edit Sale Modal */}
+{isEditModalOpen && editingSale && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="p-6 border-b flex justify-between items-center">
+        <h3 className="text-xl font-bold text-gray-800">Edit Sale #{editingSale.receiptNumber}</h3>
+        <button 
+          onClick={() => setIsEditModalOpen(false)}
+          className="text-gray-400 hover:text-gray-600"
+        >
+          ✕
+        </button>
+      </div>
+      
+      <form onSubmit={handleUpdateSale} className="p-6 space-y-4">
+        {/* Customer Info */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name</label>
+            <input
+              type="text"
+              value={editForm.customerName}
+              onChange={(e) => handleEditFormChange('customerName', e.target.value)}
+              className="input-field w-full"
+              placeholder="Walk-in"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Customer Phone</label>
+            <input
+              type="tel"
+              value={editForm.customerPhone}
+              onChange={(e) => handleEditFormChange('customerPhone', e.target.value)}
+              className="input-field w-full"
+              placeholder="+254..."
+            />
+          </div>
+        </div>
+
+        {/* Sale Details */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+            <select
+              value={editForm.paymentMethod}
+              onChange={(e) => handleEditFormChange('paymentMethod', e.target.value)}
+              className="input-field w-full"
+            >
+              <option value="CASH">Cash</option>
+              <option value="CARD">Card</option>
+              <option value="MPESA">M-Pesa</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Sale Date</label>
+            <input
+              type="datetime-local"
+              value={editForm.saleDate}
+              onChange={(e) => handleEditFormChange('saleDate', e.target.value)}
+              className="input-field w-full"
+            />
+          </div>
+        </div>
+
+        {/* Items Table */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Items</label>
+          <div className="border rounded-lg overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-2 text-left">Product</th>
+                  <th className="px-3 py-2 text-left w-20">Qty</th>
+                  <th className="px-3 py-2 text-left w-24">Price</th>
+                  <th className="px-3 py-2 text-left w-24">Subtotal</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {editForm.items.map((item, index) => (
+                  <tr key={item.productVariantId || index}>
+                    <td className="px-3 py-2">{item.productName}</td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="number"
+                        min="1"
+                        value={item.quantity}
+                        onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value) || 0)}
+                        className="w-16 px-2 py-1 border rounded"
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={item.unitPrice}
+                        onChange={(e) => handleItemChange(index, 'unitPrice', parseFloat(e.target.value) || 0)}
+                        className="w-20 px-2 py-1 border rounded"
+                      />
+                    </td>
+                    <td className="px-3 py-2 font-medium">
+                      {formatCurrency(item.subtotal)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Total */}
+        <div className="flex justify-end pt-4 border-t">
+          <div className="text-right">
+            <p className="text-sm text-gray-600">Total Amount</p>
+            <p className="text-2xl font-bold text-gray-800">{formatCurrency(editForm.totalAmount)}</p>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex justify-end gap-3 pt-4 border-t">
+          <button
+            type="button"
+            onClick={() => setIsEditModalOpen(false)}
+            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+          >
+            Save Changes
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+)}
     </Sidebar>
   );
 }
