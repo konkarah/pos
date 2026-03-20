@@ -15,6 +15,9 @@ export default function ReportsPage() {
   const [locations, setLocations] = useState([]);
   const [selectedLocation, setSelectedLocation] = useState('');
   const [initialized, setInitialized] = useState(false);
+  const [useCustomRange, setUseCustomRange] = useState(false);
+const [customStartDate, setCustomStartDate] = useState('');
+const [customEndDate, setCustomEndDate] = useState('');
 
   useEffect(() => {
     fetchLocations();
@@ -45,41 +48,74 @@ export default function ReportsPage() {
   }
 };
 
-  const fetchReport = async () => {
-    setLoading(true);
-    setReportData(null); // Clear previous data to avoid flickering old data
-    try {
-      let endpoint = '';
-      if (activeTab === 'sales') endpoint = '/reports/sales';
-      else if (activeTab === 'expenses') endpoint = '/reports/expenses';
-      else if (activeTab === 'profit') endpoint = '/reports/profit';
-
-      const params = { period, locationId: selectedLocation || undefined };
-      const res = await api.get(endpoint, { params });
-      setReportData(res.data);
-    } catch (error) {
-      toast.error('Failed to load report data');
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
+const getPeriodLabel = () => {
+  if (useCustomRange && customStartDate && customEndDate) {
+    const start = new Date(customStartDate).toLocaleDateString('en-KE', { 
+      day: 'numeric', month: 'short' 
+    });
+    const end = new Date(customEndDate).toLocaleDateString('en-KE', { 
+      day: 'numeric', month: 'short', year: 'numeric' 
+    });
+    return `${start} - ${end}`;
+  }
+  
+  const labels = {
+    daily: 'Today',
+    monthly: 'This Month',
+    quarterly: 'This Quarter',
+    'semi-annually': 'Last 6 Months',
+    yearly: 'This Year'
   };
+  return labels[period] || 'Custom';
+};
+
+const fetchReport = async () => {
+  setLoading(true);
+  setReportData(null);
+  try {
+    let endpoint = '';
+    if (activeTab === 'sales') endpoint = '/reports/sales';
+    else if (activeTab === 'expenses') endpoint = '/reports/expenses';
+    else if (activeTab === 'profit') endpoint = '/reports/profit';
+
+    // Build params object
+    const params = { 
+      locationId: selectedLocation || undefined 
+    };
+    
+    // Use custom range OR preset period
+    if (useCustomRange && customStartDate && customEndDate) {
+      params.startDate = customStartDate;
+      params.endDate = customEndDate;
+    } else {
+      params.period = period;
+    }
+
+    const res = await api.get(endpoint, { params });
+    setReportData(res.data);
+  } catch (error) {
+    toast.error('Failed to load report data');
+    console.error(error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const formatCurrency = (amount) => {
     if (amount === null || amount === undefined) return 'KES 0.00';
     return `KES ${parseFloat(amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
-  const getPeriodLabel = () => {
-    const labels = {
-      daily: 'Today',
-      monthly: 'This Month',
-      quarterly: 'This Quarter',
-      'semi-annually': 'Last 6 Months',
-      yearly: 'This Year'
-    };
-    return labels[period] || 'Custom';
-  };
+  // const getPeriodLabel = () => {
+  //   const labels = {
+  //     daily: 'Today',
+  //     monthly: 'This Month',
+  //     quarterly: 'This Quarter',
+  //     'semi-annually': 'Last 6 Months',
+  //     yearly: 'This Year'
+  //   };
+  //   return labels[period] || 'Custom';
+  // };
 
   return (
     <Sidebar>
@@ -93,66 +129,173 @@ export default function ReportsPage() {
         </div>
 
         {/* Controls */}
-        <div className="card mb-6 space-y-4">
-          <div className="flex flex-wrap gap-4 border-b pb-4">
-            <button
-              onClick={() => setActiveTab('sales')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                activeTab === 'sales' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              Sales Report
-            </button>
-            <button
-              onClick={() => setActiveTab('expenses')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                activeTab === 'expenses' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              Expenses Report
-            </button>
-            <button
-              onClick={() => setActiveTab('profit')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                activeTab === 'profit' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              Profit & Loss
-            </button>
-          </div>
+{/* Controls */}
+<div className="card mb-6 space-y-4">
+  {/* Report Tabs */}
+  <div className="flex flex-wrap gap-4 border-b pb-4">
+    <button
+      onClick={() => setActiveTab('sales')}
+      className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+        activeTab === 'sales' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+      }`}
+    >
+      Sales Report
+    </button>
+    <button
+      onClick={() => setActiveTab('expenses')}
+      className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+        activeTab === 'expenses' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+      }`}
+    >
+      Expenses Report
+    </button>
+    <button
+      onClick={() => setActiveTab('profit')}
+      className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+        activeTab === 'profit' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+      }`}
+    >
+      Profit & Loss
+    </button>
+  </div>
 
-          <div className="flex flex-wrap gap-4 items-center">
-            <div className="flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-gray-500" />
-              <select
-                value={period}
-                onChange={(e) => setPeriod(e.target.value)}
-                className="input-field w-48"
-              >
-                <option value="daily">Daily</option>
-                <option value="monthly">Monthly</option>
-                <option value="quarterly">Quarterly</option>
-                <option value="semi-annually">Semi-Annually</option>
-                <option value="yearly">Yearly</option>
-              </select>
-            </div>
+  {/* Date Range & Filters */}
+  <div className="flex flex-wrap gap-4 items-end">
+    
+    {/* Period Toggle */}
+    <div className="flex items-center gap-2">
+      <Calendar className="w-5 h-5 text-gray-500" />
+      <div className="flex bg-gray-100 rounded-lg p-1">
+        <button
+          onClick={() => setUseCustomRange(false)}
+          className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+            !useCustomRange ? 'bg-white shadow text-primary-600 font-medium' : 'text-gray-600'
+          }`}
+        >
+          Preset
+        </button>
+        <button
+          onClick={() => setUseCustomRange(true)}
+          className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+            useCustomRange ? 'bg-white shadow text-primary-600 font-medium' : 'text-gray-600'
+          }`}
+        >
+          Custom
+        </button>
+      </div>
+    </div>
 
-            <select
-              value={selectedLocation}
-              onChange={(e) => setSelectedLocation(e.target.value)}
-              className="input-field w-48"
-            >
-              <option value="">All Locations</option>
-              {locations.map(loc => (
-                <option key={loc.id} value={loc.id}>{loc.name}</option>
-              ))}
-            </select>
+    {/* Preset Period Select */}
+    {!useCustomRange && (
+      <select
+        value={period}
+        onChange={(e) => setPeriod(e.target.value)}
+        className="input-field w-40"
+      >
+        <option value="daily">Daily</option>
+        <option value="monthly">Monthly</option>
+        <option value="quarterly">Quarterly</option>
+        <option value="semi-annually">Semi-Annually</option>
+        <option value="yearly">Yearly</option>
+      </select>
+    )}
 
-            <span className="ml-auto text-sm text-gray-500">
-              Showing data for: <strong>{getPeriodLabel()}</strong>
-            </span>
-          </div>
-        </div>
+    {/* Custom Date Inputs */}
+    {useCustomRange && (
+      <div className="flex items-center gap-2">
+        <input
+          type="date"
+          value={customStartDate}
+          onChange={(e) => setCustomStartDate(e.target.value)}
+          className="input-field w-36 text-sm"
+          max={customEndDate || undefined}
+        />
+        <span className="text-gray-400">to</span>
+        <input
+          type="date"
+          value={customEndDate}
+          onChange={(e) => setCustomEndDate(e.target.value)}
+          className="input-field w-36 text-sm"
+          min={customStartDate || undefined}
+        />
+      </div>
+    )}
+    {/* Add this below the Custom Date Inputs, inside the {useCustomRange && ...} block */}
+{useCustomRange && (
+  <div className="flex flex-wrap gap-2">
+    <button
+      type="button"
+      onClick={() => {
+        const end = new Date();
+        const start = new Date();
+        start.setDate(start.getDate() - 7);
+        setCustomStartDate(start.toISOString().split('T')[0]);
+        setCustomEndDate(end.toISOString().split('T')[0]);
+      }}
+      className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded"
+    >
+      Last 7 Days
+    </button>
+    <button
+      type="button"
+      onClick={() => {
+        const end = new Date();
+        const start = new Date();
+        start.setMonth(start.getMonth() - 1);
+        setCustomStartDate(start.toISOString().split('T')[0]);
+        setCustomEndDate(end.toISOString().split('T')[0]);
+      }}
+      className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded"
+    >
+      Last 30 Days
+    </button>
+    <button
+      type="button"
+      onClick={() => {
+        const end = new Date();
+        const start = new Date(end.getFullYear(), 0, 1);
+        setCustomStartDate(start.toISOString().split('T')[0]);
+        setCustomEndDate(end.toISOString().split('T')[0]);
+      }}
+      className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded"
+    >
+      Year to Date
+    </button>
+  </div>
+)}
+
+    {/* Location Filter */}
+    <select
+      value={selectedLocation}
+      onChange={(e) => setSelectedLocation(e.target.value)}
+      className="input-field w-48"
+    >
+      <option value="">All Locations</option>
+      {locations.map(loc => (
+        <option key={loc.id} value={loc.id}>{loc.name}</option>
+      ))}
+    </select>
+
+    {/* Apply Button (for custom range) */}
+    {useCustomRange && (
+      <button
+        onClick={fetchReport}
+        disabled={!customStartDate || !customEndDate || loading}
+        className="btn-primary px-4 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {loading ? 'Loading...' : 'Apply Range'}
+      </button>
+    )}
+
+    {/* Period Label */}
+    <span className="ml-auto text-sm text-gray-500">
+      Showing: <strong>{useCustomRange && customStartDate && customEndDate 
+        ? `${new Date(customStartDate).toLocaleDateString()} - ${new Date(customEndDate).toLocaleDateString()}`
+        : getPeriodLabel()
+      }</strong>
+    </span>
+  </div>
+</div>
 
         {loading ? (
           <div className="text-center py-12 text-gray-500">
