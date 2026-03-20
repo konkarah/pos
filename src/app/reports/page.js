@@ -29,6 +29,17 @@ const [customEndDate, setCustomEndDate] = useState('');
     }
   }, [activeTab, period, selectedLocation, initialized]);
 
+  // Update formatCurrency to handle negatives clearly
+const formatCurrency = (amount) => {
+  if (amount === null || amount === undefined) return 'KES 0.00';
+  const num = parseFloat(amount);
+  const formatted = Math.abs(num).toLocaleString(undefined, { 
+    minimumFractionDigits: 2, 
+    maximumFractionDigits: 2 
+  });
+  return num < 0 ? `- KES ${formatted}` : `KES ${formatted}`;
+};
+
   useEffect(() => {
   if (!useCustomRange) {
     setCustomStartDate('');
@@ -113,10 +124,10 @@ const fetchReport = async () => {
   }
 };
 
-  const formatCurrency = (amount) => {
-    if (amount === null || amount === undefined) return 'KES 0.00';
-    return `KES ${parseFloat(amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
+  // const formatCurrency = (amount) => {
+  //   if (amount === null || amount === undefined) return 'KES 0.00';
+  //   return `KES ${parseFloat(amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  // };
 
   // const getPeriodLabel = () => {
   //   const labels = {
@@ -128,6 +139,82 @@ const fetchReport = async () => {
   //   };
   //   return labels[period] || 'Custom';
   // };
+  // Add this function to your component
+const exportReportPDF = async () => {
+  try {
+    toast.loading('Generating PDF...', { id: 'export' });
+    
+    // Build params (same as fetchReport)
+    const params = { locationId: selectedLocation || undefined };
+    if (useCustomRange && customStartDate && customEndDate) {
+      params.startDate = customStartDate;
+      params.endDate = customEndDate;
+    } else {
+      params.period = period;
+    }
+
+    // Fetch PDF blob
+    const response = await api.get(`/reports/export/${activeTab}`, { 
+      params,
+      responseType: 'blob' // Critical for PDF download
+    });
+
+    // Create download link
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    
+    const dateStr = new Date().toISOString().split('T')[0];
+    link.setAttribute('download', `${activeTab}-report-${dateStr}.pdf`);
+    
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+    
+    toast.success('PDF downloaded!', { id: 'export' });
+  } catch (error) {
+    console.error('Export error:', error);
+    toast.error('Failed to export PDF', { id: 'export' });
+  }
+};
+const exportReportExcel = async () => {
+  try {
+    toast.loading('Generating Excel file...', { id: 'export' });
+    
+    const params = { locationId: selectedLocation || undefined };
+    if (useCustomRange && customStartDate && customEndDate) {
+      params.startDate = customStartDate;
+      params.endDate = customEndDate;
+    } else {
+      params.period = period;
+    }
+
+    const response = await api.get(`/reports/export/${activeTab}`, { 
+      params,
+      responseType: 'blob' // Critical for file download
+    });
+
+    // Create download link
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    
+    const dateStr = new Date().toISOString().split('T')[0];
+    link.setAttribute('download', `${activeTab}-report-${dateStr}.xlsx`);
+    
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+    
+    toast.success('Excel file downloaded!', { id: 'export' });
+  } catch (error) {
+    console.error('Export error:', error);
+    toast.error('Failed to export Excel file', { id: 'export' });
+  }
+};
+
 
   return (
     <Sidebar>
@@ -135,8 +222,13 @@ const fetchReport = async () => {
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold text-gray-800">Reports & Analytics</h1>
-          <button className="btn-secondary flex items-center gap-2" onClick={() => toast.success('Export feature coming soon!')}>
-            <Download className="w-4 h-4" /> Export PDF
+         <button 
+            className="btn-secondary flex items-center gap-2" 
+            onClick={exportReportExcel}
+            disabled={loading || !reportData}
+          >
+            <Download className="w-4 h-4" /> 
+            {loading ? 'Generating...' : 'Export Excel'}
           </button>
         </div>
 
@@ -359,28 +451,28 @@ const fetchReport = async () => {
                 </>
               )}
 
-              {activeTab === 'profit' && (
-                <>
-                  <div className="card bg-blue-50 border-l-4 border-blue-500">
-                    <p className="text-sm text-gray-600">Total Revenue</p>
-                    <p className="text-2xl font-bold text-blue-700">{formatCurrency(reportData.revenue)}</p>
-                  </div>
-                  <div className="card bg-orange-50 border-l-4 border-orange-500">
-                    <p className="text-sm text-gray-600">COGS</p>
-                    <p className="text-2xl font-bold text-orange-700">{formatCurrency(reportData.cogs)}</p>
-                  </div>
-                  <div className="card bg-red-50 border-l-4 border-red-500">
-                    <p className="text-sm text-gray-600">Operating Expenses</p>
-                    <p className="text-2xl font-bold text-red-700">{formatCurrency(reportData.operatingExpenses)}</p>
-                  </div>
-                  <div className={`card border-l-4 ${reportData.netProfit >= 0 ? 'bg-emerald-50 border-emerald-500' : 'bg-red-50 border-red-500'}`}>
-                    <p className="text-sm text-gray-600">Net Profit</p>
-                    <p className={`text-2xl font-bold ${reportData.netProfit >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
-                      {formatCurrency(reportData.netProfit)}
-                    </p>
-                  </div>
-                </>
-              )}
+              {activeTab === 'profit' && reportData?.summary && (
+  <>
+    <div className="card bg-blue-50 border-l-4 border-blue-500">
+      <p className="text-sm text-gray-600">Total Revenue</p>
+      <p className="text-2xl font-bold text-blue-700">{formatCurrency(reportData.summary.totalRevenue)}</p>
+    </div>
+    <div className="card bg-orange-50 border-l-4 border-orange-500">
+      <p className="text-sm text-gray-600">COGS</p>
+      <p className="text-2xl font-bold text-orange-700">{formatCurrency(reportData.summary.cogs)}</p>
+    </div>
+    <div className="card bg-red-50 border-l-4 border-red-500">
+      <p className="text-sm text-gray-600">Operating Expenses</p>
+      <p className="text-2xl font-bold text-red-700">{formatCurrency(reportData.summary.operatingExpenses)}</p>
+    </div>
+    <div className={`card border-l-4 ${reportData.summary.netProfit >= 0 ? 'bg-emerald-50 border-emerald-500' : 'bg-red-50 border-red-500'}`}>
+      <p className="text-sm text-gray-600">Net Profit</p>
+      <p className={`text-2xl font-bold ${reportData.summary.netProfit >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+        {formatCurrency(reportData.summary.netProfit)}
+      </p>
+    </div>
+  </>
+)}
             </div>
 
             {/* Charts & Details */}
@@ -412,16 +504,16 @@ const fetchReport = async () => {
                         <Bar dataKey="totalAmount" fill="#ef4444" name="Amount" />
                       </BarChart>
                     ) : activeTab === 'profit' ? (
-                      <LineChart data={[{ name: 'Period', revenue: reportData.revenue, profit: reportData.netProfit, expense: reportData.operatingExpenses }]}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="name" />
-                        <YAxis />
-                        <Tooltip formatter={(value) => formatCurrency(value)} />
-                        <Legend />
-                        <Line type="monotone" dataKey="revenue" stroke="#10b981" name="Revenue" />
-                        <Line type="monotone" dataKey="expense" stroke="#ef4444" name="Expenses" />
-                        <Line type="monotone" dataKey="profit" stroke="#3b82f6" name="Net Profit" />
-                      </LineChart>
+<LineChart data={reportData.timeSeries}>
+  <CartesianGrid strokeDasharray="3 3" />
+  <XAxis dataKey="date" />
+  <YAxis />
+  <Tooltip formatter={(value) => formatCurrency(value)} />
+  <Legend />
+  <Line type="monotone" dataKey="revenue" stroke="#10b981" name="Revenue" />
+  <Line type="monotone" dataKey="expenses" stroke="#ef4444" name="Expenses" />
+  <Line type="monotone" dataKey="netProfit" stroke="#3b82f6" name="Net Profit" />
+</LineChart>
                     ) : (
                       <div className="flex items-center justify-center h-full text-gray-400">No chart data available</div>
                     )}
@@ -487,32 +579,99 @@ const fetchReport = async () => {
                 )}
 
                 {/* PROFIT TAB: Breakdown */}
-                {activeTab === 'profit' && (
-                  <div className="space-y-4">
-                    <div className="flex justify-between py-2 border-b">
-                      <span>Total Revenue</span>
-                      <span className="font-medium text-green-600">{formatCurrency(reportData.revenue)}</span>
-                    </div>
-                    <div className="flex justify-between py-2 border-b">
-                      <span>Cost of Goods Sold (COGS)</span>
-                      <span className="font-medium text-orange-600">-{formatCurrency(reportData.cogs)}</span>
-                    </div>
-                    <div className="flex justify-between py-2 border-b bg-green-50 px-2">
-                      <span className="font-bold">Gross Profit</span>
-                      <span className="font-bold text-green-700">{formatCurrency(reportData.grossProfit)}</span>
-                    </div>
-                    <div className="flex justify-between py-2 border-b">
-                      <span>Operating Expenses</span>
-                      <span className="font-medium text-red-600">-{formatCurrency(reportData.operatingExpenses)}</span>
-                    </div>
-                    <div className="flex justify-between py-3 bg-blue-50 px-2 rounded">
-                      <span className="font-bold text-lg">Net Profit</span>
-                      <span className={`font-bold text-lg ${reportData.netProfit >= 0 ? 'text-blue-700' : 'text-red-700'}`}>
-                        {formatCurrency(reportData.netProfit)}
-                      </span>
-                    </div>
-                  </div>
-                )}
+{activeTab === 'profit' && !loading && reportData?.summary && (
+  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+    
+    {/* Revenue */}
+    <div className="bg-blue-50 border-l-4 border-blue-500 rounded-lg p-3 hover:shadow-md transition">
+      <p className="text-xs text-gray-500">Revenue</p>
+      <p className="text-lg font-semibold text-blue-700">
+        {formatCurrency(reportData.summary.totalRevenue)}
+      </p>
+    </div>
+
+    {/* COGS */}
+    <div className="bg-orange-50 border-l-4 border-orange-500 rounded-lg p-3 hover:shadow-md transition">
+      <p className="text-xs text-gray-500">COGS</p>
+      <p className="text-lg font-semibold text-orange-700">
+        {formatCurrency(reportData.summary.cogs)}
+      </p>
+    </div>
+
+    {/* Gross Profit */}
+    <div className="bg-emerald-50 border-l-4 border-emerald-500 rounded-lg p-3 hover:shadow-md transition">
+      <p className="text-xs text-gray-500">Gross Profit</p>
+      <p className="text-lg font-semibold text-emerald-700">
+        {formatCurrency(reportData.summary.grossProfit)}
+      </p>
+      <p className="text-xs text-gray-500">
+        {reportData.summary.grossMargin}
+      </p>
+    </div>
+
+    {/* Expenses */}
+    <div className="bg-red-50 border-l-4 border-red-500 rounded-lg p-3 hover:shadow-md transition">
+      <p className="text-xs text-gray-500">Expenses</p>
+      <p className="text-lg font-semibold text-red-700">
+        {formatCurrency(reportData.summary.operatingExpenses)}
+      </p>
+    </div>
+
+    {/* Net Profit */}
+    <div className={`rounded-lg p-3 border-l-4 hover:shadow-md transition ${
+      reportData.summary.netProfit >= 0 
+        ? 'bg-emerald-50 border-emerald-500' 
+        : 'bg-red-50 border-red-500'
+    }`}>
+      <p className="text-xs text-gray-500">Net Profit</p>
+      <p className={`text-lg font-semibold ${
+        reportData.summary.netProfit >= 0 ? 'text-emerald-700' : 'text-red-700'
+      }`}>
+        {formatCurrency(reportData.summary.netProfit)}
+      </p>
+      <p className="text-xs text-gray-500">
+        {reportData.summary.netMargin}
+      </p>
+    </div>
+
+    {/* Bottom row (compact strip) */}
+    <div className="col-span-full bg-gray-50 rounded-lg p-3 border flex flex-wrap gap-4 text-xs md:text-sm">
+      
+      <div>
+        <p className="text-gray-500">Break-even</p>
+        <p className="font-semibold">{formatCurrency(reportData.summary.breakEvenRevenue)}</p>
+      </div>
+
+      <div>
+        <p className="text-gray-500">Profit / Txn</p>
+        <p className={`font-semibold ${
+          parseFloat(reportData.summary.profitPerTransaction) >= 0 
+            ? 'text-emerald-700' 
+            : 'text-red-700'
+        }`}>
+          {formatCurrency(parseFloat(reportData.summary.profitPerTransaction))}
+        </p>
+      </div>
+
+      <div>
+        <p className="text-gray-500">Transactions</p>
+        <p className="font-semibold">
+          {reportData.summary.totalTransactions || '—'}
+        </p>
+      </div>
+
+      <div>
+        <p className="text-gray-500">Period</p>
+        <p className="font-semibold">
+          {new Date(reportData.period.startDate).toLocaleDateString('en-KE')} -{' '}
+          {new Date(reportData.period.endDate).toLocaleDateString('en-KE')}
+        </p>
+      </div>
+
+    </div>
+
+  </div>
+)}
               </div>
 
             </div>
