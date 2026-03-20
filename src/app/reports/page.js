@@ -29,6 +29,18 @@ const [customEndDate, setCustomEndDate] = useState('');
     }
   }, [activeTab, period, selectedLocation, initialized]);
 
+  useEffect(() => {
+  if (!useCustomRange) {
+    setCustomStartDate('');
+    setCustomEndDate('');
+    // Auto-fetch with preset period
+    if (initialized) {
+      fetchReport();
+    }
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [useCustomRange, initialized]);
+
   // const fetchLocations = async () => {
   //   try {
   //     const res = await api.get('/locations');
