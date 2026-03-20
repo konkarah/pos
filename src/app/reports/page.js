@@ -504,16 +504,16 @@ const exportReportExcel = async () => {
                         <Bar dataKey="totalAmount" fill="#ef4444" name="Amount" />
                       </BarChart>
                     ) : activeTab === 'profit' ? (
-<LineChart data={reportData.timeSeries}>
-  <CartesianGrid strokeDasharray="3 3" />
-  <XAxis dataKey="date" />
-  <YAxis />
-  <Tooltip formatter={(value) => formatCurrency(value)} />
-  <Legend />
-  <Line type="monotone" dataKey="revenue" stroke="#10b981" name="Revenue" />
-  <Line type="monotone" dataKey="expenses" stroke="#ef4444" name="Expenses" />
-  <Line type="monotone" dataKey="netProfit" stroke="#3b82f6" name="Net Profit" />
-</LineChart>
+                <LineChart data={reportData.timeSeries}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <Tooltip formatter={(value) => formatCurrency(value)} />
+                  <Legend />
+                  <Line type="monotone" dataKey="revenue" stroke="#10b981" name="Revenue" />
+                  <Line type="monotone" dataKey="expenses" stroke="#ef4444" name="Expenses" />
+                  <Line type="monotone" dataKey="netProfit" stroke="#3b82f6" name="Net Profit" />
+                </LineChart>
                     ) : (
                       <div className="flex items-center justify-center h-full text-gray-400">No chart data available</div>
                     )}
@@ -559,25 +559,38 @@ const exportReportExcel = async () => {
 
                 {/* EXPENSES TAB: Recent Entries */}
                 {activeTab === 'expenses' && (
-                  <div className="overflow-y-auto max-h-64 space-y-3">
-                    {reportData.expenses && reportData.expenses.length > 0 ? (
-                      reportData.expenses.slice(0, 10).map((exp) => (
-                        <div key={exp.id} className="flex justify-between items-center text-sm border-b pb-2">
-                          <div>
-                            <p className="font-medium">{exp.category?.replace('_', ' ') || 'Unknown'}</p>
-                            <p className="text-xs text-gray-500">
-                              {new Date(exp.date).toLocaleDateString()} • {exp.location?.name || 'Unknown'}
-                            </p>
-                          </div>
-                          <span className="font-bold text-red-600">{formatCurrency(exp.amount)}</span>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-center py-8 text-gray-500 text-sm">No expense entries found.</div>
-                    )}
-                  </div>
-                )}
+  <div className="overflow-y-auto max-h-64 space-y-3">
+    {reportData.rawExpenses && reportData.rawExpenses.length > 0 ? (
+      reportData.rawExpenses.slice(0, 10).map((exp, idx) => (
+        <div key={idx} className="flex justify-between items-center text-sm border-b pb-2">
+          
+          {/* LEFT */}
+          <div>
+            <p className="font-medium">
+              {exp.category?.replace('_', ' ') || 'Unknown'}
+            </p>
+            <p className="text-xs text-gray-500">
+              {new Date(exp.date).toLocaleDateString()} • {exp.location || 'Unknown'}
+            </p>
+            {exp.description && (
+              <p className="text-xs text-gray-400 italic">{exp.description}</p>
+            )}
+          </div>
 
+          {/* RIGHT */}
+          <span className="font-bold text-red-600">
+            {formatCurrency(exp.amount)}
+          </span>
+
+        </div>
+      ))
+    ) : (
+      <div className="text-center py-8 text-gray-500 text-sm">
+        No expense entries found.
+      </div>
+    )}
+  </div>
+)}
                 {/* PROFIT TAB: Breakdown */}
 {activeTab === 'profit' && !loading && reportData?.summary && (
   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">

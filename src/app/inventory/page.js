@@ -40,6 +40,18 @@ useEffect(() => {
   fetchData();
 }, [debouncedSearch, page]);
 
+const resetForm = () => {
+  setEditingProduct(null);
+  setFormData({
+    name: '',
+    sku: '',
+    buyPrice: '',
+    sellPrice: '',
+    categoryId: '',
+    variants: [{ locationId: '', stockQuantity: 0 }]
+  });
+};
+
 const fetchData = async () => {
   setLoading(true);
   try {
@@ -94,15 +106,7 @@ const fetchData = async () => {
       }
       
       setShowModal(false);
-      setEditingProduct(null);
-      setFormData({
-        name: '',
-        sku: '',
-        buyPrice: '',
-        sellPrice: '',
-        categoryId: '',
-        variants: [{ locationId: '', stockQuantity: 0 }]
-      });
+      resetForm();
       fetchData();
     } catch (error) {
       toast.error(error.response?.data?.error || 'Operation failed');
@@ -369,16 +373,16 @@ const fetchData = async () => {
                   <button type="submit" className="btn-primary flex-1">
                     {editingProduct ? 'Update' : 'Create'}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowModal(false);
-                      setEditingProduct(null);
-                    }}
-                    className="btn-secondary flex-1"
-                  >
-                    Cancel
-                  </button>
+<button
+  type="button"
+  onClick={() => {
+    setShowModal(false);
+    resetForm(); // resets all fields
+  }}
+  className="btn-secondary flex-1"
+>
+  Cancel
+</button>
                 </div>
               </form>
             </div>
