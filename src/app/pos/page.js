@@ -406,6 +406,7 @@ useEffect(() => {
                       >
                         <option value="CASH">Cash</option>
                         <option value="card">Card</option>
+                        <option value="credit">Credit</option>
                         <option value="Paybill dtb">Paybill DTB</option>
                         <option value="Paybill coop">Paybill COOP</option>
                         <option value="Paybill dtb">Paybill KCB</option>
