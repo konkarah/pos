@@ -405,6 +405,7 @@ useEffect(() => {
                         className="input-field text-sm py-2"
                       >
                         <option value="CASH">Cash</option>
+                        <option value="card">Card</option>
                         <option value="Paybill dtb">Paybill DTB</option>
                         <option value="Paybill coop">Paybill COOP</option>
                         <option value="Paybill dtb">Paybill KCB</option>
