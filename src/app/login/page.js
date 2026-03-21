@@ -31,7 +31,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-500 to-primary-700">
       <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-800">Kenya POS</h1>
+          <h1 className="text-3xl font-bold text-gray-800">Knight Firm LTD</h1>
           <p className="text-gray-600 mt-2">Electronic Products Store</p>
         </div>
 

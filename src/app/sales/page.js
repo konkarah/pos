@@ -5,8 +5,10 @@ import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import { Download, Search, Filter } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
+import { useAuth } from '@/context/AuthContext';
 
 export default function SalesPage() {
+  const { user } = useAuth();
   const [sales, setSales] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -31,6 +33,10 @@ const [editForm, setEditForm] = useState({
 
 // Open edit modal with sale data
 const openEditModal = (sale) => {
+    if (user?.role !== 'ADMIN') {
+    toast.error('Only admins can edit sales');
+    return;
+  }
   setEditingSale(sale);
   setEditForm({
     customerName: sale.customerName || '',
@@ -73,6 +79,10 @@ const handleItemChange = (index, field, value) => {
 
 // Submit updated sale
 const handleUpdateSale = async (e) => {
+    if (user?.role !== 'ADMIN') {
+    toast.error('Unauthorized: Only admins can update sales');
+    return;
+  }
   e.preventDefault();
   
   try {
@@ -214,7 +224,9 @@ const handleUpdateSale = async (e) => {
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Payment</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Items</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Total</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Actions</th>
+                {user?.role === 'ADMIN' && (
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Actions</th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -251,27 +263,28 @@ const handleUpdateSale = async (e) => {
                     <td className="px-4 py-3 font-bold text-gray-800">
                       {formatCurrency(sale.totalAmount)}
                     </td>
-<td className="px-4 py-3">
-  <div className="flex items-center gap-3">
-    <button
+    <td className="px-4 py-3">
+    {/* <button
       onClick={() => downloadReceipt(sale.id, sale.receiptNumber)}
       className="text-primary-600 hover:text-primary-800 flex items-center gap-1 text-sm"
     >
       <Download className="w-4 h-4" />
       Receipt
-    </button>
-    <button
-      onClick={() => openEditModal(sale)}
-      className="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-sm"
-      title="Edit Sale"
-    >
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-      </svg>
-      Edit
-    </button>
-  </div>
+    </button> */}
+
+    {user?.role === 'ADMIN' && (
+      <button
+        onClick={() => openEditModal(sale)}
+        className="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-sm"
+        title="Edit Sale"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+        </svg>
+        Edit
+      </button>
+    )}
 </td>
                   </tr>
                 ))
