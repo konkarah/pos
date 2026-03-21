@@ -32,14 +32,20 @@ const [selectedLocation, setSelectedLocation] = useState('');
   useEffect(() => {
   const timeout = setTimeout(() => {
     setDebouncedSearch(searchQuery);
-  }, 300); // 400ms delay
+  }, 200); // 400ms delay
 
   return () => clearTimeout(timeout);
 }, [searchQuery]);
 
 useEffect(() => {
   fetchData();
-}, [debouncedSearch, page]);
+}, [debouncedSearch, page, selectedLocation]);
+
+// Reset page when location changes
+const handleLocationChange = (e) => {
+  setSelectedLocation(e.target.value);
+  setPage(1);
+};
 
 const resetForm = () => {
   setEditingProduct(null);
@@ -65,9 +71,9 @@ const fetchData = async () => {
       api.get('/categories')
     ]);
 
-    const productsRes = await api.get(
-      `/products?search=${debouncedSearch}&page=${page}&limit=10`
-    );
+const productsRes = await api.get(
+  `/products?search=${debouncedSearch}&page=${page}&limit=10${selectedLocation ? `&locationId=${selectedLocation}` : ''}`
+);
 
     setProducts(productsRes.data.data);
     setTotalPages(productsRes.data.totalPages);
@@ -223,7 +229,7 @@ const handleSubmit = async (e) => {
   />
   <select
     value={selectedLocation}
-    onChange={(e) => setSelectedLocation(e.target.value)}
+    onChange={handleLocationChange}
     className="input-field w-48"
   >
     <option value="">All Locations</option>
