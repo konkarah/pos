@@ -75,7 +75,8 @@ const productsRes = await api.get(
   `/products?search=${debouncedSearch}&page=${page}&limit=10${selectedLocation ? `&locationId=${selectedLocation}` : ''}`
 );
 
-    setProducts(productsRes.data.data);
+const data = productsRes.data.data;
+setProducts(selectedLocation ? data.filter(p => p.variants.length > 0) : data);
     setTotalPages(productsRes.data.totalPages);
     setLocations(locationsRes.data);
     setCategories(categoriesRes.data);
