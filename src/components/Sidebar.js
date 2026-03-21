@@ -38,7 +38,7 @@ export default function SidebarLayout({ children }) {
     <div className="min-h-screen bg-gray-50">
       {/* Mobile header with menu button */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-20 bg-white border-b px-4 py-3 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-800">Kenya POS</h1>
+        <h1 className="text-xl font-bold text-gray-800">Knight Firm LTD</h1>
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
           className="p-2 rounded-md text-gray-600 hover:bg-gray-100"
@@ -56,7 +56,7 @@ export default function SidebarLayout({ children }) {
       `}>
         {/* Sidebar header */}
         <div className="h-16 flex items-center px-6 border-b">
-          <h1 className="text-xl font-bold text-gray-800">Kenya POS</h1>
+          <h1 className="text-xl font-bold text-gray-800">Knight Firm LTD</h1>
         </div>
 
         {/* User info */}
