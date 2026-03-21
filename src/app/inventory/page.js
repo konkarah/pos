@@ -76,8 +76,9 @@ const productsRes = await api.get(
 );
 
 const data = productsRes.data.data;
-setProducts(selectedLocation ? data.filter(p => p.variants.length > 0) : data);
-    setTotalPages(productsRes.data.totalPages);
+const filtered = selectedLocation ? data.filter(p => p.variants.length > 0) : data;
+setProducts(filtered);
+setTotalPages(selectedLocation ? Math.ceil(filtered.length / 10) : productsRes.data.totalPages);
     setLocations(locationsRes.data);
     setCategories(categoriesRes.data);
   } catch (error) {
