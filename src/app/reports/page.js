@@ -665,9 +665,11 @@ const fetchReport = async () => {
   <div className="grid grid-cols-2 gap-4">
     <div className="bg-blue-50 rounded-lg p-3">
       <p className="text-xs text-gray-500">Profit Margin</p>
-      <p className="text-lg font-semibold text-blue-700">
-        {(currentData.summary?.netMargin ?? currentData.profitMargin)?.toFixed(2) ?? '0.00'}%
-      </p>
+<p className="text-lg font-semibold text-blue-700">
+  {currentData.summary?.netMargin 
+    ? currentData.summary.netMargin 
+    : `${parseFloat(currentData.profitMargin ?? 0).toFixed(2)}%`}
+</p>
     </div>
     <div className="bg-gray-50 rounded-lg p-3">
       <p className="text-xs text-gray-500">Gross Profit</p>
