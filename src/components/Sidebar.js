@@ -30,7 +30,8 @@ export default function SidebarLayout({ children }) {
     { name: 'Expenses', href: '/expenses', icon: Wallet },
     ...(user?.role === 'ADMIN' ? [
       { name: 'Transfers', href: '/transfers', icon: Truck },
-      { name: 'Reports', href: '/reports', icon: BarChart3 }
+      { name: 'Reports', href: '/reports', icon: BarChart3 },
+      { name: 'Users', href: '/users', icon: LayoutDashboard }
     ] : [])
   ];
 
