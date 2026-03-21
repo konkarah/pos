@@ -514,27 +514,27 @@ const fetchReport = async () => {
               )}
 
               {activeTab === 'profit' && currentData && (
-                <>
-                  <div className="card bg-blue-50 border-l-4 border-blue-500">
-                    <p className="text-sm text-gray-600">Total Revenue</p>
-                    <p className="text-2xl font-bold text-blue-700">{formatCurrency(currentData.revenue)}</p>
-                  </div>
-                  <div className="card bg-orange-50 border-l-4 border-orange-500">
-                    <p className="text-sm text-gray-600">COGS</p>
-                    <p className="text-2xl font-bold text-orange-700">{formatCurrency(currentData.cogs)}</p>
-                  </div>
-                  <div className="card bg-red-50 border-l-4 border-red-500">
-                    <p className="text-sm text-gray-600">Operating Expenses</p>
-                    <p className="text-2xl font-bold text-red-700">{formatCurrency(currentData.operatingExpenses)}</p>
-                  </div>
-                  <div className={`card border-l-4 ${currentData.netProfit >= 0 ? 'bg-emerald-50 border-emerald-500' : 'bg-red-50 border-red-500'}`}>
-                    <p className="text-sm text-gray-600">Net Profit</p>
-                    <p className={`text-2xl font-bold ${currentData.netProfit >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
-                      {formatCurrency(currentData.netProfit)}
-                    </p>
-                  </div>
-                </>
-              )}
+  <>
+    <div className="card bg-blue-50 border-l-4 border-blue-500">
+      <p className="text-sm text-gray-600">Total Revenue</p>
+      <p className="text-2xl font-bold text-blue-700">{formatCurrency(currentData.summary?.totalRevenue ?? currentData.revenue)}</p>
+    </div>
+    <div className="card bg-orange-50 border-l-4 border-orange-500">
+      <p className="text-sm text-gray-600">COGS</p>
+      <p className="text-2xl font-bold text-orange-700">{formatCurrency(currentData.summary?.cogs ?? currentData.cogs)}</p>
+    </div>
+    <div className="card bg-red-50 border-l-4 border-red-500">
+      <p className="text-sm text-gray-600">Operating Expenses</p>
+      <p className="text-2xl font-bold text-red-700">{formatCurrency(currentData.summary?.operatingExpenses ?? currentData.operatingExpenses)}</p>
+    </div>
+    <div className={`card border-l-4 ${(currentData.summary?.netProfit ?? currentData.netProfit) >= 0 ? 'bg-emerald-50 border-emerald-500' : 'bg-red-50 border-red-500'}`}>
+      <p className="text-sm text-gray-600">Net Profit</p>
+      <p className={`text-2xl font-bold ${(currentData.summary?.netProfit ?? currentData.netProfit) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+        {formatCurrency(currentData.summary?.netProfit ?? currentData.netProfit)}
+      </p>
+    </div>
+  </>
+)}
             </div>
 
             {/* Charts & Details */}
@@ -566,27 +566,27 @@ const fetchReport = async () => {
           <Bar dataKey="totalAmount" fill="#ef4444" name="Amount" />
         </BarChart>
       ) : activeTab === 'profit' && currentData ? (
-        <BarChart data={[
-          { name: 'Revenue', value: currentData.revenue, fill: '#0ea5e9' },
-          { name: 'COGS', value: currentData.cogs, fill: '#f97316' },
-          { name: 'Expenses', value: currentData.operatingExpenses, fill: '#ef4444' },
-          { name: 'Net Profit', value: currentData.netProfit, fill: currentData.netProfit >= 0 ? '#10b981' : '#dc2626' },
-        ]}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="name" />
-          <YAxis />
-          <Tooltip formatter={(value) => formatCurrency(value)} />
-          <Bar dataKey="value" name="Amount">
-            {[
-              { name: 'Revenue', fill: '#0ea5e9' },
-              { name: 'COGS', fill: '#f97316' },
-              { name: 'Expenses', fill: '#ef4444' },
-              { name: 'Net Profit', fill: currentData.netProfit >= 0 ? '#10b981' : '#dc2626' },
-            ].map((entry, index) => (
-              <Cell key={index} fill={entry.fill} />
-            ))}
-          </Bar>
-        </BarChart>
+  <BarChart data={[
+    { name: 'Revenue', value: currentData.summary?.totalRevenue ?? currentData.revenue, fill: '#0ea5e9' },
+    { name: 'COGS', value: currentData.summary?.cogs ?? currentData.cogs, fill: '#f97316' },
+    { name: 'Expenses', value: currentData.summary?.operatingExpenses ?? currentData.operatingExpenses, fill: '#ef4444' },
+    { name: 'Net Profit', value: currentData.summary?.netProfit ?? currentData.netProfit, fill: (currentData.summary?.netProfit ?? currentData.netProfit) >= 0 ? '#10b981' : '#dc2626' },
+  ]}>
+    <CartesianGrid strokeDasharray="3 3" />
+    <XAxis dataKey="name" />
+    <YAxis />
+    <Tooltip formatter={(value) => formatCurrency(value)} />
+    <Bar dataKey="value" name="Amount">
+      {[
+        { fill: '#0ea5e9' },
+        { fill: '#f97316' },
+        { fill: '#ef4444' },
+        { fill: (currentData.summary?.netProfit ?? currentData.netProfit) >= 0 ? '#10b981' : '#dc2626' },
+      ].map((entry, index) => (
+        <Cell key={index} fill={entry.fill} />
+      ))}
+    </Bar>
+  </BarChart>
       ) : (
         <div className="flex items-center justify-center h-full text-gray-400">No chart data available</div>
       )}
@@ -662,21 +662,21 @@ const fetchReport = async () => {
 
                 {/* PROFIT TAB: Breakdown */}
                 {activeTab === 'profit' && !loading && currentData && (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-blue-50 rounded-lg p-3">
-                      <p className="text-xs text-gray-500">Profit Margin</p>
-                      <p className="text-lg font-semibold text-blue-700">
-                        {currentData.profitMargin ? currentData.profitMargin.toFixed(2) : '0.00'}%
-                      </p>
-                    </div>
-                    <div className="bg-gray-50 rounded-lg p-3">
-                      <p className="text-xs text-gray-500">Gross Profit</p>
-                      <p className="text-lg font-semibold text-gray-700">
-                        {formatCurrency(currentData.grossProfit)}
-                      </p>
-                    </div>
-                  </div>
-                )}
+  <div className="grid grid-cols-2 gap-4">
+    <div className="bg-blue-50 rounded-lg p-3">
+      <p className="text-xs text-gray-500">Profit Margin</p>
+      <p className="text-lg font-semibold text-blue-700">
+        {(currentData.summary?.netMargin ?? currentData.profitMargin)?.toFixed(2) ?? '0.00'}%
+      </p>
+    </div>
+    <div className="bg-gray-50 rounded-lg p-3">
+      <p className="text-xs text-gray-500">Gross Profit</p>
+      <p className="text-lg font-semibold text-gray-700">
+        {formatCurrency(currentData.summary?.grossProfit ?? currentData.grossProfit)}
+      </p>
+    </div>
+  </div>
+)}
               </div>
 
             </div>
