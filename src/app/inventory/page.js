@@ -27,6 +27,7 @@ export default function InventoryPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(1);
 const [totalPages, setTotalPages] = useState(1);
+const [selectedLocation, setSelectedLocation] = useState('');
 
   useEffect(() => {
   const timeout = setTimeout(() => {
@@ -51,6 +52,10 @@ const resetForm = () => {
     variants: [{ locationId: '', stockQuantity: 0 }]
   });
 };
+
+const filteredProducts = selectedLocation
+  ? products.filter(p => p.variants.some(v => v.locationId === selectedLocation))
+  : products;
 
 const fetchData = async () => {
   setLoading(true);
@@ -208,7 +213,7 @@ const handleSubmit = async (e) => {
         </div>
 
         <div className="card overflow-x-auto">
-          <div className="mb-4">
+  <div className="mb-4 flex flex-wrap gap-3">
   <input
     type="text"
     placeholder="Search by name or SKU..."
@@ -216,6 +221,16 @@ const handleSubmit = async (e) => {
     onChange={(e) => setSearchQuery(e.target.value)}
     className="input-field w-full md:w-80"
   />
+  <select
+    value={selectedLocation}
+    onChange={(e) => setSelectedLocation(e.target.value)}
+    className="input-field w-48"
+  >
+    <option value="">All Locations</option>
+    {locations.map(loc => (
+      <option key={loc.id} value={loc.id}>{loc.name}</option>
+    ))}
+  </select>
 </div>
           <table className="w-full">
             <thead className="bg-gray-50 border-b">
@@ -232,7 +247,7 @@ const handleSubmit = async (e) => {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {products.map(product => (
+              {filteredProducts.map(product => (
                 <tr key={product.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium text-gray-800">{product.name}</td>
                   <td className="px-4 py-3 text-gray-600">{product.sku}</td>
