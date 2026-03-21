@@ -17,41 +17,69 @@ export default function Dashboard() {
     totalProducts: 0
   });
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [userLocationId, setUserLocationId] = useState(null);
 
   useEffect(() => {
-    fetchDashboardData();
-  }, []);
+    if (user) {
+      setIsAdmin(user.role === 'ADMIN');
+      setUserLocationId(user.locationId);
+      console.log('User:', { 
+        role: user.role, 
+        locationId: user.locationId,
+        username: user.username 
+      });
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      fetchDashboardData();
+    }
+  }, [user]);
 
 const fetchDashboardData = async () => {
   try {
     const now = new Date();
-
     const startOfDay = new Date(now);
     startOfDay.setHours(0, 0, 0, 0);
-
     const endOfDay = new Date(now);
     endOfDay.setHours(23, 59, 59, 999);
 
     const [salesRes, productsRes] = await Promise.all([
       api.get(`/sales?startDate=${startOfDay.toISOString()}&endDate=${endOfDay.toISOString()}`),
-      api.get('/products?page=1&limit=1000') // fetch all products for dashboard stats
+      api.get('/products?page=1&limit=1000')
     ]);
 
-    const sales = Array.isArray(salesRes.data.data) ? salesRes.data.data : [];
-    const products = Array.isArray(productsRes.data.data) ? productsRes.data.data : [];
+    const allSales = Array.isArray(salesRes.data.data) ? salesRes.data.data : [];
+    const allProducts = Array.isArray(productsRes.data.data) ? productsRes.data.data : [];
+
+    // For employees, filter to their branch only
+    const isEmployee = user?.role === 'EMPLOYEE';
+    const locationId = user?.locationId;
+
+    const sales = isEmployee
+      ? allSales.filter(sale => sale.locationId === locationId)
+      : allSales;
+
+    const products = isEmployee
+      ? allProducts.filter(p => p.variants.some(v => v.locationId === locationId))
+      : allProducts;
 
     const todayRevenue = sales.reduce((sum, sale) => sum + (sale.totalAmount || 0), 0);
 
-    // Count low stock items (less than 5)
     let lowStockCount = 0;
     products.forEach(product => {
-      product.variants.forEach(variant => {
+      const variants = isEmployee
+        ? product.variants.filter(v => v.locationId === locationId)
+        : product.variants;
+      variants.forEach(variant => {
         if (variant.stockQuantity < 5) lowStockCount++;
       });
     });
 
     setStats({
-      todaySales: sales.length || 0,
+      todaySales: sales.length,
       todayRevenue,
       lowStockItems: lowStockCount,
       totalProducts: products.length
@@ -107,6 +135,23 @@ const fetchDashboardData = async () => {
         <div className="mb-8">
           <h2 className="text-2xl font-bold text-gray-800">Dashboard</h2>
           <p className="text-gray-600">Welcome back, {user?.username}!</p>
+          {!isAdmin && userLocationId && (
+            <div className="mt-2 p-3 bg-blue-50 border-l-4 border-blue-500 rounded">
+              <p className="text-sm text-blue-700">
+                📍 Showing data for: <strong>{userLocationId === 'tmall-branch' ? 'Tmall branch' : 'CBD branch'}</strong>
+              </p>
+              <p className="text-xs text-blue-600 mt-1">
+                You can only view data for your assigned branch
+              </p>
+            </div>
+          )}
+          {isAdmin && (
+            <div className="mt-2 p-3 bg-green-50 border-l-4 border-green-500 rounded">
+              <p className="text-sm text-green-700">
+                👑 Admin view - Showing data for all branches
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Stats Grid */}

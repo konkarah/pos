@@ -10,130 +10,153 @@ import { useAuth } from '@/context/AuthContext';
 export default function SalesPage() {
   const { user } = useAuth();
   const [sales, setSales] = useState([]);
+  const [filteredSales, setFilteredSales] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterLocation, setFilterLocation] = useState('');
   const [locations, setLocations] = useState([]);
   const [page, setPage] = useState(1);
-const [limit] = useState(10);
-const [meta, setMeta] = useState(null);
-// Add these states to your SalesPage component
-const [editingSale, setEditingSale] = useState(null);
-const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-const [editForm, setEditForm] = useState({
-  customerName: '',
-  customerPhone: '',
-  paymentMethod: 'CASH',
-  totalAmount: 0,
-  saleDate: '',
-  items: []
-});
-
-
-
-// Open edit modal with sale data
-const openEditModal = (sale) => {
-    if (user?.role !== 'ADMIN') {
-    toast.error('Only admins can edit sales');
-    return;
-  }
-  setEditingSale(sale);
-  setEditForm({
-    customerName: sale.customerName || '',
-    customerPhone: sale.customerPhone || '',
-    paymentMethod: sale.paymentMethod,
-    totalAmount: sale.totalAmount,
-    saleDate: new Date(sale.createdAt).toISOString().slice(0, 16), // datetime-local format
-    items: sale.items.map(item => ({
-      id: item.id,
-      productVariantId: item.productVariantId,
-      productName: item.productVariant.product.name,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      subtotal: item.subtotal
-    }))
+  const [limit] = useState(10);
+  const [meta, setMeta] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [userLocationId, setUserLocationId] = useState(null);
+  
+  // Edit states
+  const [editingSale, setEditingSale] = useState(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editForm, setEditForm] = useState({
+    customerName: '',
+    customerPhone: '',
+    paymentMethod: 'CASH',
+    totalAmount: 0,
+    saleDate: '',
+    items: []
   });
-  setIsEditModalOpen(true);
-};
 
-// Handle form input changes
-const handleEditFormChange = (field, value) => {
-  setEditForm(prev => ({ ...prev, [field]: value }));
-};
-
-// Handle item quantity/price changes
-const handleItemChange = (index, field, value) => {
-  const newItems = [...editForm.items];
-  newItems[index] = { ...newItems[index], [field]: value };
-  
-  // Recalculate subtotal and total
-  newItems[index].subtotal = newItems[index].quantity * newItems[index].unitPrice;
-  const newTotal = newItems.reduce((sum, item) => sum + item.subtotal, 0);
-  
-  setEditForm(prev => ({
-    ...prev,
-    items: newItems,
-    totalAmount: newTotal
-  }));
-};
-
-// Submit updated sale
-const handleUpdateSale = async (e) => {
-    if (user?.role !== 'ADMIN') {
-    toast.error('Unauthorized: Only admins can update sales');
-    return;
-  }
-  e.preventDefault();
-  
-  try {
-    const response = await api.put(`/sales/${editingSale.id}`, {
-      ...editForm,
-      items: editForm.items.map(({ id, ...item }) => item) // remove local id if needed
-    });
-    
-    toast.success('Sale updated successfully');
-    setIsEditModalOpen(false);
-    setEditingSale(null);
-    fetchData(); // Refresh the sales list
-  } catch (error) {
-    console.error('Update error:', error);
-    toast.error(error.response?.data?.error || 'Failed to update sale');
-  }
-};
+  useEffect(() => {
+    if (user) {
+      setIsAdmin(user.role === 'ADMIN');
+      setUserLocationId(user.locationId);
+    }
+  }, [user]);
 
   useEffect(() => {
     fetchData();
   }, [page]);
 
+  useEffect(() => {
+    filterSalesByLocationAndSearch();
+  }, [sales, searchQuery, filterLocation, userLocationId, isAdmin]);
+
+  const filterSalesByLocationAndSearch = () => {
+    if (!sales) return;
+    
+    let filtered = [...sales];
+    
+    // Filter by location based on user role
+    if (!isAdmin && userLocationId) {
+      filtered = filtered.filter(sale => sale.locationId === userLocationId);
+    } else if (filterLocation && isAdmin) {
+      // Only apply location filter if admin has selected a specific location
+      filtered = filtered.filter(sale => sale.locationId === filterLocation);
+    }
+    
+    // Apply search filter
+    if (searchQuery) {
+      filtered = filtered.filter(sale => 
+        sale.receiptNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        sale.customerName?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+    
+    setFilteredSales(filtered);
+  };
+
   const fetchData = async () => {
-  try {
-    setLoading(true);
+    try {
+      setLoading(true);
+      
+      // Only fetch all sales if admin, otherwise fetch all but filter client-side
+      const [salesRes, locationsRes] = await Promise.all([
+        api.get(`/sales?page=${page}&limit=${limit}`),
+        api.get('/locations')
+      ]);
 
-    const [salesRes, locationsRes] = await Promise.all([
-      api.get(`/sales?page=${page}&limit=${limit}`),
-      api.get('/locations')
-    ]);
+      setSales(Array.isArray(salesRes.data.data) ? salesRes.data.data : []);
+      setMeta(salesRes.data.meta);
+      setLocations(locationsRes.data);
+      
+    } catch (error) {
+      toast.error('Failed to load sales data');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    setSales(Array.isArray(salesRes.data.data) ? salesRes.data.data : []);
-    setMeta(salesRes.data.meta);
-    setLocations(locationsRes.data);
+  const openEditModal = (sale) => {
+    if (user?.role !== 'ADMIN') {
+      toast.error('Only admins can edit sales');
+      return;
+    }
+    setEditingSale(sale);
+    setEditForm({
+      customerName: sale.customerName || '',
+      customerPhone: sale.customerPhone || '',
+      paymentMethod: sale.paymentMethod,
+      totalAmount: sale.totalAmount,
+      saleDate: new Date(sale.createdAt).toISOString().slice(0, 16),
+      items: sale.items.map(item => ({
+        id: item.id,
+        productVariantId: item.productVariantId,
+        productName: item.productVariant.product.name,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        subtotal: item.subtotal
+      }))
+    });
+    setIsEditModalOpen(true);
+  };
 
-  } catch (error) {
-    toast.error('Failed to load sales data');
-  } finally {
-    setLoading(false);
-  }
-};
+  const handleEditFormChange = (field, value) => {
+    setEditForm(prev => ({ ...prev, [field]: value }));
+  };
 
-  const filteredSales = sales.filter(sale => {
-    const matchesSearch = 
-      sale.receiptNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      sale.customerName?.toLowerCase().includes(searchQuery.toLowerCase());
+  const handleItemChange = (index, field, value) => {
+    const newItems = [...editForm.items];
+    newItems[index] = { ...newItems[index], [field]: value };
     
-    const matchesLocation = filterLocation ? sale.locationId === filterLocation : true;
+    newItems[index].subtotal = newItems[index].quantity * newItems[index].unitPrice;
+    const newTotal = newItems.reduce((sum, item) => sum + item.subtotal, 0);
     
-    return matchesSearch && matchesLocation;
-  });
+    setEditForm(prev => ({
+      ...prev,
+      items: newItems,
+      totalAmount: newTotal
+    }));
+  };
+
+  const handleUpdateSale = async (e) => {
+    if (user?.role !== 'ADMIN') {
+      toast.error('Unauthorized: Only admins can update sales');
+      return;
+    }
+    e.preventDefault();
+    
+    try {
+      const response = await api.put(`/sales/${editingSale.id}`, {
+        ...editForm,
+        items: editForm.items.map(({ id, ...item }) => item)
+      });
+      
+      toast.success('Sale updated successfully');
+      setIsEditModalOpen(false);
+      setEditingSale(null);
+      fetchData();
+    } catch (error) {
+      console.error('Update error:', error);
+      toast.error(error.response?.data?.error || 'Failed to update sale');
+    }
+  };
 
   const formatCurrency = (amount) => {
     return `KES ${parseFloat(amount).toLocaleString()}`;
@@ -142,17 +165,7 @@ const handleUpdateSale = async (e) => {
   const downloadReceipt = async (saleId, receiptNumber) => {
     try {
       const response = await api.get(`/sales/${saleId}`);
-      // In a real scenario, you'd fetch the PDF blob here. 
-      // For now, we'll just show a success message as the PDF was generated at sale time.
       toast.success(`Receipt ${receiptNumber} downloaded (simulated)`);
-      
-      // If your backend returns the PDF base64 in the GET request, you would do:
-      // const pdfBlob = new Blob([Buffer.from(response.data.receipt, 'base64')], { type: 'application/pdf' });
-      // const url = window.URL.createObjectURL(pdfBlob);
-      // const link = document.createElement('a');
-      // link.href = url;
-      // link.download = `${receiptNumber}.pdf`;
-      // link.click();
     } catch (error) {
       toast.error('Failed to download receipt');
     }
@@ -160,7 +173,7 @@ const handleUpdateSale = async (e) => {
 
   if (loading) return <div className="p-6">Loading sales history...</div>;
 
-  const totalRevenue = sales.reduce((sum, sale) => sum + sale.totalAmount, 0);
+  const totalRevenue = filteredSales.reduce((sum, sale) => sum + sale.totalAmount, 0);
 
   return (
     <Sidebar>
@@ -176,12 +189,12 @@ const handleUpdateSale = async (e) => {
           </div>
           <div className="card bg-blue-50 border-l-4 border-blue-500">
             <p className="text-sm text-gray-600">Total Transactions</p>
-            <p className="text-2xl font-bold text-blue-700">{sales.length}</p>
+            <p className="text-2xl font-bold text-blue-700">{filteredSales.length}</p>
           </div>
           <div className="card bg-purple-50 border-l-4 border-purple-500">
             <p className="text-sm text-gray-600">Average Sale</p>
             <p className="text-2xl font-bold text-purple-700">
-              {sales.length > 0 ? formatCurrency(totalRevenue / sales.length) : 'KES 0'}
+              {filteredSales.length > 0 ? formatCurrency(totalRevenue / filteredSales.length) : 'KES 0'}
             </p>
           </div>
         </div>
@@ -198,18 +211,29 @@ const handleUpdateSale = async (e) => {
               className="input-field pl-10"
             />
           </div>
-          <div className="w-full md:w-64">
-            <select
-              value={filterLocation}
-              onChange={(e) => setFilterLocation(e.target.value)}
-              className="input-field"
-            >
-              <option value="">All Locations</option>
-              {locations.map(loc => (
-                <option key={loc.id} value={loc.id}>{loc.name}</option>
-              ))}
-            </select>
-          </div>
+          
+          {/* Only show location filter for admin users */}
+          {isAdmin && (
+            <div className="w-full md:w-64">
+              <select
+                value={filterLocation}
+                onChange={(e) => setFilterLocation(e.target.value)}
+                className="input-field"
+              >
+                <option value="">All Locations</option>
+                {locations.map(loc => (
+                  <option key={loc.id} value={loc.id}>{loc.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          
+          {/* Show current location for non-admin users */}
+          {!isAdmin && userLocationId && (
+            <div className="w-full md:w-64 px-3 py-2 bg-gray-100 rounded-lg text-sm text-gray-600">
+              <span className="font-medium">Location:</span> {locations.find(l => l.id === userLocationId)?.name || 'My Location'}
+            </div>
+          )}
         </div>
 
         {/* Sales Table */}
@@ -233,7 +257,9 @@ const handleUpdateSale = async (e) => {
               {filteredSales.length === 0 ? (
                 <tr>
                   <td colSpan="8" className="px-4 py-8 text-center text-gray-500">
-                    No sales found matching your filters.
+                    {!isAdmin && userLocationId 
+                      ? 'No sales found for your location.'
+                      : 'No sales found matching your filters.'}
                   </td>
                 </tr>
               ) : (
@@ -263,197 +289,189 @@ const handleUpdateSale = async (e) => {
                     <td className="px-4 py-3 font-bold text-gray-800">
                       {formatCurrency(sale.totalAmount)}
                     </td>
-    <td className="px-4 py-3">
-    {/* <button
-      onClick={() => downloadReceipt(sale.id, sale.receiptNumber)}
-      className="text-primary-600 hover:text-primary-800 flex items-center gap-1 text-sm"
-    >
-      <Download className="w-4 h-4" />
-      Receipt
-    </button> */}
-
-    {user?.role === 'ADMIN' && (
-      <button
-        onClick={() => openEditModal(sale)}
-        className="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-sm"
-        title="Edit Sale"
-      >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-        </svg>
-        Edit
-      </button>
-    )}
-</td>
+                    <td className="px-4 py-3">
+                      {user?.role === 'ADMIN' && (
+                        <button
+                          onClick={() => openEditModal(sale)}
+                          className="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-sm"
+                          title="Edit Sale"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                          Edit
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))
               )}
             </tbody>
           </table>
+          
+          {/* Pagination */}
           <div className="flex justify-between items-center mt-4">
-            
-  <button
-    disabled={page === 1}
-    onClick={() => setPage(prev => prev - 1)}
-    className="px-4 py-2 bg-gray-200 rounded disabled:opacity-50"
-  >
-    Previous
-  </button>
-
-  <span className="text-sm text-gray-600">
-    Page {meta?.page} of {meta?.lastPage}
-  </span>
-
-  <button
-    disabled={page === meta?.lastPage}
-    onClick={() => setPage(prev => prev + 1)}
-    className="px-4 py-2 bg-gray-200 rounded disabled:opacity-50"
-  >
-    Next
-  </button>
-</div>
-        </div>
-      </div>
-    </div>
-    {/* Edit Sale Modal */}
-{isEditModalOpen && editingSale && (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-    <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-      <div className="p-6 border-b flex justify-between items-center">
-        <h3 className="text-xl font-bold text-gray-800">Edit Sale #{editingSale.receiptNumber}</h3>
-        <button 
-          onClick={() => setIsEditModalOpen(false)}
-          className="text-gray-400 hover:text-gray-600"
-        >
-          ✕
-        </button>
-      </div>
-      
-      <form onSubmit={handleUpdateSale} className="p-6 space-y-4">
-        {/* Customer Info */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name</label>
-            <input
-              type="text"
-              value={editForm.customerName}
-              onChange={(e) => handleEditFormChange('customerName', e.target.value)}
-              className="input-field w-full"
-              placeholder="Walk-in"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Customer Phone</label>
-            <input
-              type="tel"
-              value={editForm.customerPhone}
-              onChange={(e) => handleEditFormChange('customerPhone', e.target.value)}
-              className="input-field w-full"
-              placeholder="+254..."
-            />
-          </div>
-        </div>
-
-        {/* Sale Details */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
-            <select
-              value={editForm.paymentMethod}
-              onChange={(e) => handleEditFormChange('paymentMethod', e.target.value)}
-              className="input-field w-full"
+            <button
+              disabled={page === 1}
+              onClick={() => setPage(prev => prev - 1)}
+              className="px-4 py-2 bg-gray-200 rounded disabled:opacity-50"
             >
-              <option value="CASH">Cash</option>
-              <option value="CARD">Card</option>
-              <option value="MPESA">M-Pesa</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Sale Date</label>
-            <input
-              type="datetime-local"
-              value={editForm.saleDate}
-              onChange={(e) => handleEditFormChange('saleDate', e.target.value)}
-              className="input-field w-full"
-            />
-          </div>
-        </div>
-
-        {/* Items Table */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Items</label>
-          <div className="border rounded-lg overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-3 py-2 text-left">Product</th>
-                  <th className="px-3 py-2 text-left w-20">Qty</th>
-                  <th className="px-3 py-2 text-left w-24">Price</th>
-                  <th className="px-3 py-2 text-left w-24">Subtotal</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {editForm.items.map((item, index) => (
-                  <tr key={item.productVariantId || index}>
-                    <td className="px-3 py-2">{item.productName}</td>
-                    <td className="px-3 py-2">
-                      <input
-                        type="number"
-                        min="1"
-                        value={item.quantity}
-                        onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value) || 0)}
-                        className="w-16 px-2 py-1 border rounded"
-                      />
-                    </td>
-                    <td className="px-3 py-2">
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={item.unitPrice}
-                        onChange={(e) => handleItemChange(index, 'unitPrice', parseFloat(e.target.value) || 0)}
-                        className="w-20 px-2 py-1 border rounded"
-                      />
-                    </td>
-                    <td className="px-3 py-2 font-medium">
-                      {formatCurrency(item.subtotal)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+              Previous
+            </button>
+            <span className="text-sm text-gray-600">
+              Page {meta?.page} of {meta?.lastPage}
+            </span>
+            <button
+              disabled={page === meta?.lastPage}
+              onClick={() => setPage(prev => prev + 1)}
+              className="px-4 py-2 bg-gray-200 rounded disabled:opacity-50"
+            >
+              Next
+            </button>
           </div>
         </div>
-
-        {/* Total */}
-        <div className="flex justify-end pt-4 border-t">
-          <div className="text-right">
-            <p className="text-sm text-gray-600">Total Amount</p>
-            <p className="text-2xl font-bold text-gray-800">{formatCurrency(editForm.totalAmount)}</p>
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="flex justify-end gap-3 pt-4 border-t">
-          <button
-            type="button"
-            onClick={() => setIsEditModalOpen(false)}
-            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-          >
-            Save Changes
-          </button>
-        </div>
-      </form>
+      </div>
     </div>
-  </div>
-)}
+
+    {/* Edit Sale Modal */}
+    {isEditModalOpen && editingSale && (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="p-6 border-b flex justify-between items-center">
+            <h3 className="text-xl font-bold text-gray-800">Edit Sale #{editingSale.receiptNumber}</h3>
+            <button 
+              onClick={() => setIsEditModalOpen(false)}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              ✕
+            </button>
+          </div>
+          
+          <form onSubmit={handleUpdateSale} className="p-6 space-y-4">
+            {/* Customer Info */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name</label>
+                <input
+                  type="text"
+                  value={editForm.customerName}
+                  onChange={(e) => handleEditFormChange('customerName', e.target.value)}
+                  className="input-field w-full"
+                  placeholder="Walk-in"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Customer Phone</label>
+                <input
+                  type="tel"
+                  value={editForm.customerPhone}
+                  onChange={(e) => handleEditFormChange('customerPhone', e.target.value)}
+                  className="input-field w-full"
+                  placeholder="+254..."
+                />
+              </div>
+            </div>
+
+            {/* Sale Details */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+                <select
+                  value={editForm.paymentMethod}
+                  onChange={(e) => handleEditFormChange('paymentMethod', e.target.value)}
+                  className="input-field w-full"
+                >
+                  <option value="CASH">Cash</option>
+                  <option value="CARD">Card</option>
+                  <option value="MPESA">M-Pesa</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Sale Date</label>
+                <input
+                  type="datetime-local"
+                  value={editForm.saleDate}
+                  onChange={(e) => handleEditFormChange('saleDate', e.target.value)}
+                  className="input-field w-full"
+                />
+              </div>
+            </div>
+
+            {/* Items Table */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Items</label>
+              <div className="border rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Product</th>
+                      <th className="px-3 py-2 text-left w-20">Qty</th>
+                      <th className="px-3 py-2 text-left w-24">Price</th>
+                      <th className="px-3 py-2 text-left w-24">Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {editForm.items.map((item, index) => (
+                      <tr key={item.productVariantId || index}>
+                        <td className="px-3 py-2">{item.productName}</td>
+                        <td className="px-3 py-2">
+                          <input
+                            type="number"
+                            min="1"
+                            value={item.quantity}
+                            onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value) || 0)}
+                            className="w-16 px-2 py-1 border rounded"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={item.unitPrice}
+                            onChange={(e) => handleItemChange(index, 'unitPrice', parseFloat(e.target.value) || 0)}
+                            className="w-20 px-2 py-1 border rounded"
+                          />
+                        </td>
+                        <td className="px-3 py-2 font-medium">
+                          {formatCurrency(item.subtotal)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Total */}
+            <div className="flex justify-end pt-4 border-t">
+              <div className="text-right">
+                <p className="text-sm text-gray-600">Total Amount</p>
+                <p className="text-2xl font-bold text-gray-800">{formatCurrency(editForm.totalAmount)}</p>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex justify-end gap-3 pt-4 border-t">
+              <button
+                type="button"
+                onClick={() => setIsEditModalOpen(false)}
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+              >
+                Save Changes
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    )}
     </Sidebar>
   );
 }
