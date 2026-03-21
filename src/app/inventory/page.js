@@ -43,9 +43,14 @@ useEffect(() => {
 
 // Reset page when location changes
 const handleLocationChange = (e) => {
-  setSelectedLocation(e.target.value);
+  const value = e.target.value;
+
+  setSelectedLocation(value);
+
+  // FULL RESET
   setProducts([]);
   setPage(1);
+  setTotalPages(1);
 };
 
 const resetForm = () => {
