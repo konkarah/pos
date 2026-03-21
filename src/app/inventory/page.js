@@ -253,7 +253,7 @@ const handleSubmit = async (e) => {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {filteredProducts.map(product => (
+              {products.map(product => (
                 <tr key={product.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium text-gray-800">{product.name}</td>
                   <td className="px-4 py-3 text-gray-600">{product.sku}</td>
