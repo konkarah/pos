@@ -26,6 +26,32 @@ export default function POSPage() {
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [processing, setProcessing] = useState(false);
    const [saleDate, setSaleDate] = useState(''); 
+   const [currentUser, setCurrentUser] = useState(null);
+
+   useEffect(() => {
+  const fetchCurrentUser = async () => {
+    try {
+      const res = await api.get('/auth/me'); // Adjust endpoint to your auth setup
+      setCurrentUser(res.data);
+      
+      // Auto-select user's location if they're an employee
+      if (res.data.role === 'EMPLOYEE' && res.data.locationId) {
+        setSelectedLocation(res.data.locationId);
+      }
+    } catch (error) {
+      console.error('Failed to fetch user:', error);
+    }
+  };
+  fetchCurrentUser();
+}, []);
+
+// Update fetchData to respect employee location lock
+useEffect(() => {
+  const delay = setTimeout(() => {
+    fetchData();
+  }, 300);
+  return () => clearTimeout(delay);
+}, [searchQuery, selectedLocation]);
 
 // 1. init
 useEffect(() => {
@@ -43,52 +69,57 @@ useEffect(() => {
   return () => clearTimeout(delay);
 }, [searchQuery, selectedLocation]);
 
-  const fetchData = async () => {
-  try {
-    const [productsRes, locationsRes] = await Promise.all([
-      api.get(
-        `/products?search=${searchQuery}&page=1&limit=20&locationId=${selectedLocation}`
-      ),
-      api.get('/locations')
-    ]);
-
-    setProducts(
-      Array.isArray(productsRes.data.data)
-        ? productsRes.data.data
-        : []
-    );
-
-    setLocations(locationsRes.data);
-
-    // only set location once (avoid infinite refetch)
-    if (!selectedLocation && locationsRes.data.length > 0) {
-      setSelectedLocation(locationsRes.data[0].id);
-    }
-
-  } catch (error) {
-    toast.error('Failed to load data');
-    console.error(error);
-  }
-};
-
-// const fetchData = async () => {
+//   const fetchData = async () => {
 //   try {
 //     const [productsRes, locationsRes] = await Promise.all([
-//       api.get(`/products?search=${searchQuery}&page=1&limit=20&locationId=${selectedLocation}`), // fetch all products for POS
+//       api.get(
+//         `/products?search=${searchQuery}&page=1&limit=20&locationId=${selectedLocation}`
+//       ),
 //       api.get('/locations')
 //     ]);
 
-//     setProducts(Array.isArray(productsRes.data.data) ? productsRes.data.data : []);
+//     setProducts(
+//       Array.isArray(productsRes.data.data)
+//         ? productsRes.data.data
+//         : []
+//     );
+
 //     setLocations(locationsRes.data);
 
-//     if (locationsRes.data.length > 0) {
+//     // only set location once (avoid infinite refetch)
+//     if (!selectedLocation && locationsRes.data.length > 0) {
 //       setSelectedLocation(locationsRes.data[0].id);
 //     }
+
 //   } catch (error) {
 //     toast.error('Failed to load data');
 //     console.error(error);
 //   }
 // };
+const fetchData = async () => {
+  try {
+    // For employees, force their location; for admins, use selected or first
+    const locationToFetch = currentUser?.role === 'EMPLOYEE' 
+      ? currentUser.locationId 
+      : selectedLocation;
+
+    const [productsRes, locationsRes] = await Promise.all([
+      api.get(`/products?search=${searchQuery}&page=1&limit=20&locationId=${locationToFetch}`),
+      api.get('/locations')
+    ]);
+
+    setProducts(Array.isArray(productsRes.data.data) ? productsRes.data.data : []);
+    setLocations(locationsRes.data);
+
+    // Only auto-select for admins; employees are locked
+    if (currentUser?.role !== 'EMPLOYEE' && !selectedLocation && locationsRes.data.length > 0) {
+      setSelectedLocation(locationsRes.data[0].id);
+    }
+  } catch (error) {
+    toast.error('Failed to load data');
+    console.error(error);
+  }
+};
 
   // const filteredProducts = products.filter(product => {
   //   const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -261,19 +292,53 @@ useEffect(() => {
                     className="input-field pl-10"
                   />
                 </div>
-                <select
-                  value={selectedLocation}
-                  onChange={(e) => setSelectedLocation(e.target.value)}
-                  className="input-field w-48"
-                >
-                  <option value="">Select Location</option>
-                  {locations.map(loc => (
-                    <option key={loc.id} value={loc.id}>{loc.name}</option>
-                  ))}
-                </select>
+<select
+  value={selectedLocation}
+  onChange={(e) => setSelectedLocation(e.target.value)}
+  className="input-field w-48"
+  disabled={currentUser?.role === 'EMPLOYEE'}
+>
+  {currentUser?.role === 'EMPLOYEE' ? (
+    <option value={currentUser.locationId}>
+      {locations.find(l => l.id === currentUser.locationId)?.name || 'Your Branch'}
+    </option>
+  ) : (
+    <>
+      <option value="">Select Location</option>
+      {locations.map(loc => (
+        <option key={loc.id} value={loc.id}>{loc.name}</option>
+      ))}
+    </>
+  )}
+</select>
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                {/* {products.map(product => {
+                  const variant = product.variants.find(v => v.locationId === selectedLocation);
+                  const inStock = variant && variant.stockQuantity > 0;
+                  
+                  return (
+                    <div
+                      key={product.id}
+                      onClick={() => inStock && addToCart(product, variant)}
+                      className={`card cursor-pointer transition-all ${
+                        inStock ? 'hover:shadow-lg hover:-translate-y-1' : 'opacity-50 cursor-not-allowed'
+                      }`}
+                    >
+                      <h3 className="font-semibold text-gray-800">{product.name}</h3>
+                      <p className="text-sm text-gray-600">SKU: {product.sku}</p>
+                      {variant && (
+                        <p className={`text-sm mt-2 ${inStock ? 'text-green-600' : 'text-red-600'}`}>
+                          Stock: {variant.stockQuantity}
+                        </p>
+                      )}
+                      <p className="text-lg font-bold text-primary-600 mt-2">
+                        KES {product.sellPrice.toLocaleString()}
+                      </p>
+                    </div>
+                  );
+                })} */}
                 {products.map(product => {
                   const variant = product.variants.find(v => v.locationId === selectedLocation);
                   const inStock = variant && variant.stockQuantity > 0;

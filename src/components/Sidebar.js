@@ -28,9 +28,9 @@ export default function SidebarLayout({ children }) {
     { name: 'Inventory', href: '/inventory', icon: Package },
     { name: 'Sales', href: '/sales', icon: Receipt },
     { name: 'Expenses', href: '/expenses', icon: Wallet },
+    { name: 'Reports', href: '/reports', icon: BarChart3 },
     ...(user?.role === 'ADMIN' ? [
       { name: 'Transfers', href: '/transfers', icon: Truck },
-      { name: 'Reports', href: '/reports', icon: BarChart3 },
       { name: 'Users', href: '/users', icon: LayoutDashboard }
     ] : [])
   ];
