@@ -129,7 +129,7 @@ const filteredProducts = products.filter(product => {
   );
 
   // Only show if variant exists (and optionally has stock)
-  return variant && variant.stockQuantity > 0;
+  return variant;
 });
 
   // const filteredProducts = products.filter(product => {
