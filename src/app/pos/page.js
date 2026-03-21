@@ -120,6 +120,17 @@ const fetchData = async () => {
     console.error(error);
   }
 };
+const filteredProducts = products.filter(product => {
+  if (!selectedLocation) return false;
+
+  // Find variant for this branch
+  const variant = product.variants.find(
+    v => v.locationId === selectedLocation
+  );
+
+  // Only show if variant exists (and optionally has stock)
+  return variant && variant.stockQuantity > 0;
+});
 
   // const filteredProducts = products.filter(product => {
   //   const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -339,7 +350,7 @@ const fetchData = async () => {
                     </div>
                   );
                 })} */}
-                {products.map(product => {
+                {filteredProducts.map(product => {
                   const variant = product.variants.find(v => v.locationId === selectedLocation);
                   const inStock = variant && variant.stockQuantity > 0;
                   
