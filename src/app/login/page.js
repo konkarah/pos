@@ -43,7 +43,7 @@ export default function LoginPage() {
             <input
               type="text"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={(e) => setUsername(e.target.value.toLowerCase().trim())}
               className="input-field"
               required
               autoFocus
