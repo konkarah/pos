@@ -93,28 +93,42 @@ const fetchData = async () => {
 //   }
 // };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    try {
-      if (editingProduct) {
-        await api.put(`/products/${editingProduct.id}`, formData);
-        toast.success('Product updated successfully');
-      } else {
-        await api.post('/products', formData);
-        toast.success('Product created successfully');
+const handleSubmit = async (e) => {
+  e.preventDefault();
+
+  let payload = { ...formData };
+
+  // 🔒 Force employee location
+  if (user?.role === 'EMPLOYEE') {
+    payload.variants = payload.variants.map(v => ({
+      ...v,
+      locationId: user.locationId
+    }));
+  }
+
+  try {
+    if (editingProduct) {
+      if (user?.role !== 'ADMIN') {
+        toast.error('Only admins can edit products');
+        return;
       }
-      
-      setShowModal(false);
-      resetForm();
-      fetchData();
-    } catch (error) {
-      toast.error(error.response?.data?.error || 'Operation failed');
+      await api.put(`/products/${editingProduct.id}`, payload);
+      toast.success('Product updated successfully');
+    } else {
+      await api.post('/products', payload);
+      toast.success('Product created successfully');
     }
-  };
+
+    setShowModal(false);
+    resetForm();
+    fetchData();
+  } catch (error) {
+    toast.error(error.response?.data?.error || 'Operation failed');
+  }
+};
 
   const handleEdit = (product) => {
-    if (user.role !== 'ADMIN') {
+    if (user?.role !== 'ADMIN') {
       toast.error('Only admins can edit products');
       return;
     }
@@ -134,7 +148,7 @@ const fetchData = async () => {
   };
 
   const handleDelete = async (id) => {
-    if (user.role !== 'ADMIN') {
+    if (user?.role !== 'ADMIN') {
       toast.error('Only admins can delete products');
       return;
     }
@@ -160,6 +174,26 @@ const fetchData = async () => {
   if (loading) {
     return <div className="p-6">Loading...</div>;
   }
+
+  const handleAddStock = async (variant) => {
+  const quantity = prompt('Enter quantity to add:');
+
+  if (!quantity || isNaN(quantity) || Number(quantity) <= 0) {
+    toast.error('Invalid quantity');
+    return;
+  }
+
+  try {
+    await api.put(`/products/variants/${variant.id}/stock`, {
+      stockQuantity: Number(quantity)
+    });
+
+    toast.success('Stock updated successfully');
+    fetchData();
+  } catch (error) {
+    toast.error(error.response?.data?.error || 'Failed to update stock');
+  }
+};
 
   return (
     <Sidebar>
@@ -192,7 +226,7 @@ const fetchData = async () => {
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Buy Price</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Sell Price</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Stock</th>
-                {user.role === 'ADMIN' && (
+                {user?.role === 'ADMIN' && (
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Actions</th>
                 )}
               </tr>
@@ -206,13 +240,24 @@ const fetchData = async () => {
                   <td className="px-4 py-3 text-gray-600">KES {product.buyPrice.toLocaleString()}</td>
                   <td className="px-4 py-3 text-gray-600">KES {product.sellPrice.toLocaleString()}</td>
                   <td className="px-4 py-3">
-                    {product.variants.map((v, idx) => (
-                      <div key={idx} className="text-sm">
-                        {v.location.name}: {v.stockQuantity}
-                      </div>
-                    ))}
+{product.variants.map((v, idx) => (
+  <div key={idx} className="text-sm flex items-center justify-between">
+    <span>
+      {v.location.name}: {v.stockQuantity}
+    </span>
+
+    {user?.role === 'EMPLOYEE' && user.locationId === v.locationId && (
+      <button
+        onClick={() => handleAddStock(v)}
+        className="ml-2 text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
+      >
+        + Stock
+      </button>
+    )}
+  </div>
+))}
                   </td>
-                  {user.role === 'ADMIN' && (
+                  {user?.role === 'ADMIN' && (
                     <td className="px-4 py-3">
                       <button
                         onClick={() => handleEdit(product)}
@@ -331,21 +376,36 @@ const fetchData = async () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Variants & Stock</label>
                   {formData.variants.map((variant, idx) => (
                     <div key={idx} className="flex gap-2 mb-2">
-                      <select
-                        required
-                        value={variant.locationId}
-                        onChange={(e) => {
-                          const newVariants = [...formData.variants];
-                          newVariants[idx].locationId = e.target.value;
-                          setFormData({...formData, variants: newVariants});
-                        }}
-                        className="input-field flex-1"
-                      >
-                        <option value="">Select Location</option>
-                        {locations.map(loc => (
-                          <option key={loc.id} value={loc.id}>{loc.name}</option>
-                        ))}
-                      </select>
+<select
+  required
+  value={
+    user?.role === 'EMPLOYEE'
+      ? user.locationId
+      : variant.locationId
+  }
+  onChange={(e) => {
+    if (user?.role === 'EMPLOYEE') return;
+
+    const newVariants = [...formData.variants];
+    newVariants[idx].locationId = e.target.value;
+    setFormData({ ...formData, variants: newVariants });
+  }}
+  className="input-field flex-1"
+  disabled={user?.role === 'EMPLOYEE'}
+>
+  {user?.role === 'EMPLOYEE' ? (
+    <option value={user.locationId}>
+      {locations.find(l => l.id === user.locationId)?.name || 'Your Branch'}
+    </option>
+  ) : (
+    <>
+      <option value="">Select Location</option>
+      {locations.map(loc => (
+        <option key={loc.id} value={loc.id}>{loc.name}</option>
+      ))}
+    </>
+  )}
+</select>
                       <input
                         type="number"
                         placeholder="Stock"
