@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
-import { Plus, Edit, Trash2 } from 'lucide-react';
+import { Plus, Edit, Trash2, RefreshCw } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 
 export default function InventoryPage() {
@@ -30,6 +30,7 @@ export default function InventoryPage() {
   const [selectedLocation, setSelectedLocation] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
   const [userLocationId, setUserLocationId] = useState(null);
+  const [nextSKU, setNextSKU] = useState('');
 
   useEffect(() => {
     if (user) {
@@ -58,6 +59,50 @@ export default function InventoryPage() {
     }
   }, [debouncedSearch, page, selectedLocation, user]);
 
+  // Generate next SKU when opening modal
+  useEffect(() => {
+    if (showModal && !editingProduct) {
+      generateNextSKU();
+    }
+  }, [showModal, editingProduct]);
+
+  const generateNextSKU = async () => {
+    try {
+      // Fetch the latest product to get the highest SKU number
+      const response = await api.get('/products/latest-sku');
+      const latestSKU = response.data.latestSKU;
+      
+      // Extract number from SKU (assuming SKU format is like "10001")
+      let nextNumber = 10000; // Default starting point
+      
+      if (latestSKU) {
+        const skuNumber = parseInt(latestSKU);
+        if (!isNaN(skuNumber) && skuNumber >= 10000) {
+          nextNumber = skuNumber + 1;
+        }
+      }
+      
+      setNextSKU(nextNumber.toString());
+      setFormData(prev => ({ ...prev, sku: nextNumber.toString() }));
+    } catch (error) {
+      console.error('Failed to generate SKU:', error);
+      // Fallback to default
+      setNextSKU('10000');
+      setFormData(prev => ({ ...prev, sku: '10000' }));
+    }
+  };
+
+  const handleGenerateNewSKU = () => {
+    const currentNumber = parseInt(formData.sku);
+    if (!isNaN(currentNumber) && currentNumber >= 10000) {
+      const newNumber = currentNumber + 1;
+      setNextSKU(newNumber.toString());
+      setFormData(prev => ({ ...prev, sku: newNumber.toString() }));
+    } else {
+      generateNextSKU();
+    }
+  };
+
   const handleLocationChange = (e) => {
     const value = e.target.value;
     setSelectedLocation(value);
@@ -68,7 +113,7 @@ export default function InventoryPage() {
     setEditingProduct(null);
     setFormData({
       name: '',
-      sku: '',
+      sku: nextSKU || '',
       buyPrice: '',
       sellPrice: '',
       categoryId: '',
@@ -95,14 +140,12 @@ export default function InventoryPage() {
       }
       
       // Only filter by location if admin AND a location is selected
-      // Employees can see all locations, so no location filter for them
       if (isAdmin && selectedLocation) {
         params.append('locationId', selectedLocation);
       }
 
       const productsRes = await api.get(`/products?${params.toString()}`);
       
-      // The API already returns paginated results
       const data = productsRes.data.data;
       
       setProducts(data);
@@ -119,6 +162,12 @@ export default function InventoryPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Validate SKU
+    if (!formData.sku || formData.sku.trim() === '') {
+      toast.error('SKU is required');
+      return;
+    }
 
     let payload = { ...formData };
 
@@ -400,7 +449,19 @@ export default function InventoryPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">SKU *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      SKU *
+                      {!editingProduct && (
+                        <button
+                          type="button"
+                          onClick={handleGenerateNewSKU}
+                          className="ml-2 text-xs text-blue-600 hover:text-blue-800"
+                          title="Generate new SKU"
+                        >
+                          <RefreshCw className="w-3 h-3 inline" /> Generate
+                        </button>
+                      )}
+                    </label>
                     <input
                       type="text"
                       required
@@ -408,7 +469,13 @@ export default function InventoryPage() {
                       onChange={(e) => setFormData({...formData, sku: e.target.value})}
                       className="input-field"
                       disabled={!!editingProduct}
+                      placeholder="Auto-generated SKU"
                     />
+                    {!editingProduct && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        SKU is auto-generated starting from 10000. You can edit it if needed.
+                      </p>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
