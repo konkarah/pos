@@ -524,16 +524,16 @@ export default function ReportsPage() {
     </div>
                   <div className="card bg-red-50 border-l-4 border-red-500">
                     <p className="text-sm text-gray-600">Total Stock Out</p>
-                    <p className="text-2xl font-bold text-red-700">{stockMovementData.summary?.totalStockOut || 0}</p>
+                    <p className="text-2xl font-bold text-red-700">{stockMovementData?.summary?.totalStockOut || 0}</p>
                   </div>
                   <div className="card bg-green-50 border-l-4 border-green-500">
                     <p className="text-sm text-gray-600">Total Stock In</p>
-                    <p className="text-2xl font-bold text-green-700">{stockMovementData.summary?.totalStockIn || 0}</p>
+                    <p className="text-2xl font-bold text-green-700">{stockMovementData?.summary?.totalStockIn || 0}</p>
                   </div>
                   <div className="card bg-blue-50 border-l-4 border-blue-500">
                     <p className="text-sm text-gray-600">Net Stock Change</p>
-                    <p className={`text-2xl font-bold ${(stockMovementData.summary?.netStockChange || 0) >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                      {(stockMovementData.summary?.netStockChange || 0) >= 0 ? '+' : ''}{stockMovementData.summary?.netStockChange || 0}
+                    <p className={`text-2xl font-bold ${(stockMovementData?.summary?.netStockChange || 0) >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                      {(stockMovementData?.summary?.netStockChange || 0) >= 0 ? '+' : ''}{stockMovementData.summary?.netStockChange || 0}
                     </p>
                   </div>
                   <div className="card bg-purple-50 border-l-4 border-purple-500">
@@ -689,7 +689,7 @@ export default function ReportsPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {stockMovementData.data.slice().reverse().slice(0, 10).map((item, idx) => (
+                        {stockMovementData?.data.slice().reverse().slice(0, 10).map((item, idx) => (
                           <tr key={idx} className="border-b hover:bg-gray-50">
                             <td className="px-3 py-2 font-mono text-xs">{item.date}</td>
                             <td className="px-3 py-2 text-right text-red-600">{item.stockOut}</td>
