@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
-import { Plus, Trash2, Edit, X } from 'lucide-react';
+import { Plus, Trash2, Edit, X, Search, Filter } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 import { useAuth } from '@/context/AuthContext';
 
@@ -19,10 +19,13 @@ export default function ExpensesPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [userLocationId, setUserLocationId] = useState(null);
   const [page, setPage] = useState(1);
-const [totalPages, setTotalPages] = useState(1);
-const [limit] = useState(10);
-const [totalExpenses, setTotalExpenses] = useState(0);
-  
+  const [totalPages, setTotalPages] = useState(1);
+  const [limit] = useState(10);
+  const [totalExpenses, setTotalExpenses] = useState(0);
+  const [selectedLocation, setSelectedLocation] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
   // Helper function to get local date string in YYYY-MM-DD format
   const getLocalDateString = (date) => {
     const d = new Date(date);
@@ -32,10 +35,6 @@ const [totalExpenses, setTotalExpenses] = useState(0);
     return `${year}-${month}-${day}`;
   };
 
-  useEffect(() => {
-  fetchData();
-}, [page]);
-  
   const [formData, setFormData] = useState({
     locationId: '',
     category: 'MISCELLANEOUS',
@@ -51,67 +50,104 @@ const [totalExpenses, setTotalExpenses] = useState(0);
     { value: 'MISCELLANEOUS', label: 'Miscellaneous' }
   ];
 
+  // Debounce search input
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+      setPage(1); // Reset to first page when search changes
+    }, 500);
+    return () => clearTimeout(timeout);
+  }, [searchQuery]);
+
   useEffect(() => {
     if (user) {
       setIsAdmin(user.role === 'ADMIN');
       setUserLocationId(user.locationId);
+      // For employees, set their location as default filter
+      if (user.role !== 'ADMIN' && user.locationId) {
+        setSelectedLocation(user.locationId);
+      }
     }
   }, [user]);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [page, debouncedSearch, selectedLocation]);
 
   useEffect(() => {
-    filterExpensesByLocation();
-  }, [expenses, userLocationId, isAdmin]);
+    filterExpensesByLocationAndSearch();
+  }, [expenses, userLocationId, isAdmin, selectedLocation, searchQuery]);
 
-  const filterExpensesByLocation = () => {
+  const filterExpensesByLocationAndSearch = () => {
     if (!expenses) return;
 
-    if (isAdmin) {
-      setFilteredExpenses(expenses);
-      return;
+    let filtered = [...expenses];
+
+    // Filter by location
+    if (!isAdmin && userLocationId) {
+      filtered = filtered.filter(expense => expense.locationId === userLocationId);
+    } else if (isAdmin && selectedLocation) {
+      filtered = filtered.filter(expense => expense.locationId === selectedLocation);
     }
 
-    if (userLocationId) {
-      setFilteredExpenses(expenses.filter(expense => expense.locationId === userLocationId));
-    } else {
-      setFilteredExpenses([]);
+    // Filter by search (description, category, amount)
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(expense => 
+        expense.description?.toLowerCase().includes(query) ||
+        expense.category?.toLowerCase().includes(query) ||
+        expense.amount.toString().includes(query) ||
+        expense.location?.name?.toLowerCase().includes(query)
+      );
     }
+
+    setFilteredExpenses(filtered);
   };
 
-const fetchData = async () => {
-  try {
-    const [expensesRes, locationsRes] = await Promise.all([
-      api.get(`/expenses?page=${page}&limit=${limit}`),
-      api.get('/locations')
-    ]);
-
-    setExpenses(expensesRes.data.data); // array for table
-    setTotalPages(expensesRes.data.pagination.totalPages);
-    setTotalExpenses(expensesRes.data.totalAmount || 0); // total sum across all pages
-
-    setLocations(locationsRes.data);
-
-    if (locationsRes.data.length > 0) {
-      if (!isAdmin && userLocationId) {
-        setFormData(prev => ({ ...prev, locationId: userLocationId }));
-      } else {
-        setFormData(prev => ({ ...prev, locationId: locationsRes.data[0].id }));
+  const fetchData = async () => {
+    try {
+      // Build query params for API
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: limit.toString()
+      });
+      
+      // Add filters to API call
+      if (selectedLocation && isAdmin) {
+        params.append('locationId', selectedLocation);
       }
+      if (debouncedSearch) {
+        params.append('search', debouncedSearch);
+      }
+
+      const [expensesRes, locationsRes] = await Promise.all([
+        api.get(`/expenses?${params.toString()}`),
+        api.get('/locations')
+      ]);
+
+      setExpenses(expensesRes.data.data);
+      setTotalPages(expensesRes.data.pagination.totalPages);
+      setTotalExpenses(expensesRes.data.totalAmount || 0);
+      setLocations(locationsRes.data);
+
+      if (locationsRes.data.length > 0) {
+        if (!isAdmin && userLocationId) {
+          setFormData(prev => ({ ...prev, locationId: userLocationId }));
+        } else {
+          setFormData(prev => ({ ...prev, locationId: locationsRes.data[0].id }));
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load expenses:', error);
+      toast.error('Failed to load expenses');
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    toast.error('Failed to load expenses');
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      // Send the date as is (YYYY-MM-DD format)
       await api.post('/expenses', formData);
       toast.success('Expense added successfully');
       setShowModal(false);
@@ -191,18 +227,23 @@ const fetchData = async () => {
     return `KES ${parseFloat(amount).toLocaleString()}`;
   };
 
-  // Format date for display (handle UTC dates properly)
   const formatDisplayDate = (dateString) => {
     const date = new Date(dateString);
-    // Add timezone offset to display correctly
     const userTimezoneOffset = date.getTimezoneOffset() * 60000;
     const localDate = new Date(date.getTime() + userTimezoneOffset);
     return localDate.toLocaleDateString();
   };
 
+  const handleClearFilters = () => {
+    setSearchQuery('');
+    setSelectedLocation('');
+    setPage(1);
+  };
+
   if (loading) return <div className="p-6">Loading expenses...</div>;
 
-  // const totalExpenses = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
+  // Calculate filtered total
+  const filteredTotal = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
 
   return (
     <Sidebar>
@@ -221,7 +262,7 @@ const fetchData = async () => {
             <div className="card bg-red-50 border-l-4 border-red-500">
               <p className="text-sm text-gray-600">Total Expenses</p>
               <p className="text-2xl font-bold text-red-700">
-                {formatCurrency(totalExpenses)}
+                {formatCurrency(filteredTotal)}
               </p>
             </div>
             <div className="card bg-blue-50 border-l-4 border-blue-500">
@@ -248,6 +289,75 @@ const fetchData = async () => {
             )}
           </div>
 
+          {/* Filters */}
+          <div className="card mb-6">
+            <div className="flex flex-wrap gap-4 items-center">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type="text"
+                  placeholder="Search by description, category, amount, or location..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="input-field pl-10 w-full"
+                />
+              </div>
+              
+              {/* Location filter - only show for admins */}
+              {isAdmin && (
+                <div className="w-48">
+                  <select
+                    value={selectedLocation}
+                    onChange={(e) => setSelectedLocation(e.target.value)}
+                    className="input-field w-full"
+                  >
+                    <option value="">All Locations</option>
+                    {locations.map(loc => (
+                      <option key={loc.id} value={loc.id}>{loc.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              
+              {(searchQuery || selectedLocation) && (
+                <button
+                  onClick={handleClearFilters}
+                  className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 bg-gray-100 rounded-lg hover:bg-gray-200"
+                >
+                  Clear Filters
+                </button>
+              )}
+            </div>
+            
+            {/* Active filters display */}
+            {(searchQuery || selectedLocation) && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {searchQuery && (
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
+                    Search: {searchQuery}
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="ml-1 hover:text-blue-600"
+                    >
+                      ×
+                    </button>
+                  </span>
+                )}
+                {selectedLocation && (
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">
+                    Location: {locations.find(l => l.id === selectedLocation)?.name}
+                    <button
+                      onClick={() => setSelectedLocation('')}
+                      className="ml-1 hover:text-green-600"
+                    >
+                      ×
+                    </button>
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Expenses Table */}
           <div className="card overflow-x-auto">
             <table className="w-full">
@@ -259,7 +369,7 @@ const fetchData = async () => {
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Description</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Amount</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Actions</th>
-                </tr>
+                 </tr>
               </thead>
               <tbody className="divide-y">
                 {filteredExpenses.length === 0 ? (
@@ -267,14 +377,14 @@ const fetchData = async () => {
                     <td colSpan="6" className="px-4 py-8 text-center text-gray-500">
                       {!isAdmin && userLocationId 
                         ? 'No expenses recorded for your location yet.'
-                        : 'No expenses recorded yet.'}
+                        : 'No expenses recorded matching your filters.'}
                     </td>
                   </tr>
                 ) : (
                   filteredExpenses.map((expense) => (
                     <tr key={expense.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-gray-800">
-                        {new Date(expense.date).toLocaleDateString()}
+                        {formatDisplayDate(expense.date)}
                       </td>
                       <td className="px-4 py-3">
                         <span className="px-2 py-1 bg-gray-100 rounded text-xs font-medium">
@@ -315,32 +425,34 @@ const fetchData = async () => {
                 )}
               </tbody>
             </table>
-            <div className="flex justify-between items-center mt-4">
-  <button
-    onClick={() => setPage(prev => Math.max(prev - 1, 1))}
-    disabled={page === 1}
-    className="btn-secondary"
-  >
-    Previous
-  </button>
-
-  <span className="text-sm text-gray-600">
-    Page {page} of {totalPages}
-  </span>
-
-  <button
-    onClick={() => setPage(prev => Math.min(prev + 1, totalPages))}
-    disabled={page === totalPages}
-    className="btn-secondary"
-  >
-    Next
-  </button>
-</div>
+            
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex justify-between items-center mt-4">
+                <button
+                  onClick={() => setPage(prev => Math.max(prev - 1, 1))}
+                  disabled={page === 1}
+                  className="btn-secondary"
+                >
+                  Previous
+                </button>
+                <span className="text-sm text-gray-600">
+                  Page {page} of {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={page === totalPages}
+                  className="btn-secondary"
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Add Expense Modal */}
+      {/* Add Expense Modal - Keep existing */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg p-6 max-w-md w-full">
@@ -439,7 +551,7 @@ const fetchData = async () => {
         </div>
       )}
 
-      {/* Edit Expense Modal */}
+      {/* Edit Expense Modal - Keep existing */}
       {showEditModal && editingExpense && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg p-6 max-w-md w-full">
