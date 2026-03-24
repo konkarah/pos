@@ -42,7 +42,7 @@ export default function InventoryPage() {
   useEffect(() => {
     const timeout = setTimeout(() => {
       setDebouncedSearch(searchQuery);
-    }, 400);
+    }, 800);
 
     return () => clearTimeout(timeout);
   }, [searchQuery]);
