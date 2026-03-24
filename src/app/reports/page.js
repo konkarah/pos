@@ -118,8 +118,8 @@ export default function ReportsPage() {
       );
       
       const filteredSales = filtered.salesByLocation;
-      filtered.summary = {
-        ...filtered.summary,
+filtered.summary = {
+  ...(filtered.summary || {}),
         totalRevenue: filteredSales.reduce((sum, item) => sum + item.totalRevenue, 0),
         totalTransactions: filteredSales.reduce((sum, item) => sum + item.transactionCount, 0),
         averageTransactionValue: filteredSales.reduce((sum, item) => sum + item.totalRevenue, 0) / 
