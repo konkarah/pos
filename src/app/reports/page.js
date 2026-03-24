@@ -160,43 +160,66 @@ filtered.summary = {
     setFilteredReportData(filtered);
   };
 
-  const fetchReport = async () => {
-    setLoading(true);
-    setReportData(null);
-    setFilteredReportData(null);
-    try {
-      let endpoint = '';
-      if (activeTab === 'sales') endpoint = '/reports/sales';
-      else if (activeTab === 'expenses') endpoint = '/reports/expenses';
-      else if (activeTab === 'profit') endpoint = '/reports/stock-movement';
+const fetchReport = async () => {
+  setLoading(true);
+  setReportData(null);
+  setFilteredReportData(null);
 
-      const params = {};
-      if (useCustomRange && customStartDate && customEndDate) {
-        params.startDate = customStartDate;
-        params.endDate = customEndDate;
-      } else {
-        params.period = period;
-      }
-      
-      if (selectedLocation && isAdmin) {
-        params.locationId = selectedLocation;
-      }
+  try {
+    const params = {};
 
-      const res = await api.get(endpoint, { params });
-      
-      if (activeTab === 'profit') {
-        setStockMovementData(res.data);
-        setReportData(res.data);
-      } else {
-        setReportData(res.data);
-      }
-    } catch (error) {
-      toast.error('Failed to load report data');
-      console.error(error);
-    } finally {
-      setLoading(false);
+    if (useCustomRange && customStartDate && customEndDate) {
+      params.startDate = customStartDate;
+      params.endDate = customEndDate;
+    } else {
+      params.period = period;
     }
-  };
+
+    if (selectedLocation && isAdmin) {
+      params.locationId = selectedLocation;
+    }
+
+    // -----------------------------
+    // PROFIT TAB → CALL MULTIPLE APIs
+    // -----------------------------
+    if (activeTab === 'profit') {
+      const [stockRes, profitRes] = await Promise.all([
+        api.get('/reports/stock-movement', { params }),
+        api.get('/reports/profit', { params })
+      ]);
+
+      // keep existing behavior
+      setStockMovementData(stockRes.data);
+
+      // 👇 merge both responses into ONE object
+      setReportData({
+        ...stockRes.data,
+        ...profitRes.data,
+        // optional: keep them grouped too
+        stockMovement: stockRes.data,
+        profit: profitRes.data
+      });
+
+      return;
+    }
+
+    // -----------------------------
+    // OTHER TABS (unchanged)
+    // -----------------------------
+    let endpoint = '';
+    if (activeTab === 'sales') endpoint = '/reports/sales';
+    else if (activeTab === 'expenses') endpoint = '/reports/expenses';
+
+    const res = await api.get(endpoint, { params });
+    setReportData(res.data);
+
+  } catch (error) {
+    toast.error('Failed to load report data');
+    console.error(error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const exportReportExcel = async () => {
     try {
