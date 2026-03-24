@@ -538,7 +538,7 @@ filtered.summary = {
                   </div>
                   <div className="card bg-purple-50 border-l-4 border-purple-500">
                     <p className="text-sm text-gray-600">Days Tracked</p>
-                    <p className="text-2xl font-bold text-purple-700">{stockMovementData.data?.length || 0}</p>
+                    <p className="text-2xl font-bold text-purple-700">{stockMovementData?.data?.length || 0}</p>
                   </div>
                 </>
 )}
