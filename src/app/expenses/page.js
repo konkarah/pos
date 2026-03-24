@@ -18,12 +18,22 @@ export default function ExpensesPage() {
   const [editingExpense, setEditingExpense] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [userLocationId, setUserLocationId] = useState(null);
+  
+  // Helper function to get local date string in YYYY-MM-DD format
+  const getLocalDateString = (date) => {
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  
   const [formData, setFormData] = useState({
     locationId: '',
     category: 'MISCELLANEOUS',
     amount: '',
     description: '',
-    date: new Date().toISOString().split('T')[0]
+    date: getLocalDateString(new Date())
   });
 
   const categories = [
@@ -74,7 +84,6 @@ export default function ExpensesPage() {
       
       // Set default location for form
       if (locationsRes.data.length > 0) {
-        // For employees, default to their assigned location
         if (!isAdmin && userLocationId) {
           setFormData(prev => ({ ...prev, locationId: userLocationId }));
         } else {
@@ -91,6 +100,7 @@ export default function ExpensesPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      // Send the date as is (YYYY-MM-DD format)
       await api.post('/expenses', formData);
       toast.success('Expense added successfully');
       setShowModal(false);
@@ -112,7 +122,7 @@ export default function ExpensesPage() {
       category: expense.category,
       amount: expense.amount,
       description: expense.description || '',
-      date: new Date(expense.date).toISOString().split('T')[0]
+      date: getLocalDateString(new Date(expense.date))
     });
     setShowEditModal(true);
   };
@@ -158,7 +168,7 @@ export default function ExpensesPage() {
       category: 'MISCELLANEOUS',
       amount: '',
       description: '',
-      date: new Date().toISOString().split('T')[0]
+      date: getLocalDateString(new Date())
     });
   };
 
@@ -168,6 +178,15 @@ export default function ExpensesPage() {
 
   const formatCurrency = (amount) => {
     return `KES ${parseFloat(amount).toLocaleString()}`;
+  };
+
+  // Format date for display (handle UTC dates properly)
+  const formatDisplayDate = (dateString) => {
+    const date = new Date(dateString);
+    // Add timezone offset to display correctly
+    const userTimezoneOffset = date.getTimezoneOffset() * 60000;
+    const localDate = new Date(date.getTime() + userTimezoneOffset);
+    return localDate.toLocaleDateString();
   };
 
   if (loading) return <div className="p-6">Loading expenses...</div>;
