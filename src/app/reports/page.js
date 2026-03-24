@@ -3,18 +3,19 @@
 import { useState, useEffect } from 'react';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
-import { BarChart, Bar, XAxis,Cell, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts';
-import { Download, Calendar } from 'lucide-react';
+import { BarChart, Bar, XAxis,Cell, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, AreaChart, Area } from 'recharts';
+import { Download, Calendar, TrendingUp, TrendingDown, Package } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
-import { useAuth } from '@/context/AuthContext'; // Import your auth context
+import { useAuth } from '@/context/AuthContext';
 
 export default function ReportsPage() {
-  const { user } = useAuth(); // Get current user
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('sales');
   const [period, setPeriod] = useState('monthly');
   const [loading, setLoading] = useState(false);
   const [reportData, setReportData] = useState(null);
   const [filteredReportData, setFilteredReportData] = useState(null);
+  const [stockMovementData, setStockMovementData] = useState(null);
   const [locations, setLocations] = useState([]);
   const [selectedLocation, setSelectedLocation] = useState('');
   const [initialized, setInitialized] = useState(false);
@@ -28,8 +29,7 @@ export default function ReportsPage() {
     if (user) {
       setIsAdmin(user.role === 'ADMIN');
       setUserLocationId(user.locationId);
-      // For non-admin users, set their location as the default filter
-      if (user.locationId && user.role !== 'admin') {
+      if (user.locationId && user.role !== 'ADMIN') {
         setSelectedLocation(user.locationId);
       }
     }
@@ -46,7 +46,6 @@ export default function ReportsPage() {
   }, [activeTab, period, initialized]);
 
   useEffect(() => {
-    // Apply frontend filtering whenever selectedLocation changes or reportData changes
     if (reportData) {
       filterReportDataByLocation();
     }
@@ -103,26 +102,21 @@ export default function ReportsPage() {
     return labels[period] || 'Custom';
   };
 
-  // Frontend filtering function
   const filterReportDataByLocation = () => {
     if (!reportData) return;
 
-    // If no location filter is selected (for admin) or if it's "All Locations"
     if (!selectedLocation) {
       setFilteredReportData(reportData);
       return;
     }
 
-    // Create filtered copy of the report data
     const filtered = { ...reportData };
 
-    // Filter sales by location
     if (activeTab === 'sales' && filtered.salesByLocation) {
       filtered.salesByLocation = filtered.salesByLocation.filter(
         item => item.locationId === selectedLocation
       );
       
-      // Recalculate summary based on filtered data
       const filteredSales = filtered.salesByLocation;
       filtered.summary = {
         ...filtered.summary,
@@ -133,20 +127,17 @@ export default function ReportsPage() {
       };
     }
 
-    // Filter expenses by location
     if (activeTab === 'expenses' && filtered.expenses) {
       filtered.expenses = filtered.expenses.filter(
         expense => expense.locationId === selectedLocation
       );
       
-      // Recalculate summary
       filtered.summary = {
         ...filtered.summary,
         totalExpenses: filtered.expenses.reduce((sum, exp) => sum + exp.amount, 0),
         totalExpenseEntries: filtered.expenses.length
       };
       
-      // Recalculate expenses by category
       const categoryMap = new Map();
       filtered.expenses.forEach(exp => {
         if (categoryMap.has(exp.category)) {
@@ -166,53 +157,52 @@ export default function ReportsPage() {
       filtered.expensesByCategory = Array.from(categoryMap.values());
     }
 
-    // Filter profit data by location
-    if (activeTab === 'profit' && filtered.salesData && filtered.expensesData) {
-      // For profit, you'd need to filter both sales and expenses
-      // This would require storing the raw data separately
-      // For now, we'll just show that filtering is applied
-      filtered.filteredByLocation = selectedLocation;
-    }
-
     setFilteredReportData(filtered);
   };
 
-const fetchReport = async () => {
-  setLoading(true);
-  setReportData(null);
-  setFilteredReportData(null);
-  try {
-    let endpoint = '';
-    if (activeTab === 'sales') endpoint = '/reports/sales';
-    else if (activeTab === 'expenses') endpoint = '/reports/expenses';
-    else if (activeTab === 'profit') endpoint = '/reports/profit';
+  const fetchReport = async () => {
+    setLoading(true);
+    setReportData(null);
+    setFilteredReportData(null);
+    try {
+      let endpoint = '';
+      if (activeTab === 'sales') endpoint = '/reports/sales';
+      else if (activeTab === 'expenses') endpoint = '/reports/expenses';
+      else if (activeTab === 'profit') endpoint = '/reports/stock-movement';
 
-    const params = {};
-    if (useCustomRange && customStartDate && customEndDate) {
-      params.startDate = customStartDate;
-      params.endDate = customEndDate;
-    } else {
-      params.period = period;
+      const params = {};
+      if (useCustomRange && customStartDate && customEndDate) {
+        params.startDate = customStartDate;
+        params.endDate = customEndDate;
+      } else {
+        params.period = period;
+      }
+      
+      if (selectedLocation && isAdmin) {
+        params.locationId = selectedLocation;
+      }
+
+      const res = await api.get(endpoint, { params });
+      
+      if (activeTab === 'profit') {
+        setStockMovementData(res.data);
+        setReportData(res.data);
+      } else {
+        setReportData(res.data);
+      }
+    } catch (error) {
+      toast.error('Failed to load report data');
+      console.error(error);
+    } finally {
+      setLoading(false);
     }
-
-    const res = await api.get(endpoint, { params });
-    setReportData(res.data); // filterReportDataByLocation fires via useEffect
-  } catch (error) {
-    toast.error('Failed to load report data');
-    console.error(error);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const exportReportExcel = async () => {
     try {
       toast.loading('Generating Excel file...', { id: 'export' });
       
       const params = {};
-      // For frontend filtering, we still export all data
-      // Or you could export only filtered data by creating a custom export
-      
       if (useCustomRange && customStartDate && customEndDate) {
         params.startDate = customStartDate;
         params.endDate = customEndDate;
@@ -245,7 +235,6 @@ const fetchReport = async () => {
     }
   };
 
-  // Helper to get current display data
   const getCurrentDisplayData = () => {
     return filteredReportData || reportData;
   };
@@ -533,7 +522,25 @@ const fetchReport = async () => {
         {formatCurrency(currentData.summary?.netProfit ?? currentData.netProfit)}
       </p>
     </div>
-  </>
+                  <div className="card bg-red-50 border-l-4 border-red-500">
+                    <p className="text-sm text-gray-600">Total Stock Out</p>
+                    <p className="text-2xl font-bold text-red-700">{stockMovementData.summary?.totalStockOut || 0}</p>
+                  </div>
+                  <div className="card bg-green-50 border-l-4 border-green-500">
+                    <p className="text-sm text-gray-600">Total Stock In</p>
+                    <p className="text-2xl font-bold text-green-700">{stockMovementData.summary?.totalStockIn || 0}</p>
+                  </div>
+                  <div className="card bg-blue-50 border-l-4 border-blue-500">
+                    <p className="text-sm text-gray-600">Net Stock Change</p>
+                    <p className={`text-2xl font-bold ${(stockMovementData.summary?.netStockChange || 0) >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                      {(stockMovementData.summary?.netStockChange || 0) >= 0 ? '+' : ''}{stockMovementData.summary?.netStockChange || 0}
+                    </p>
+                  </div>
+                  <div className="card bg-purple-50 border-l-4 border-purple-500">
+                    <p className="text-sm text-gray-600">Days Tracked</p>
+                    <p className="text-2xl font-bold text-purple-700">{stockMovementData.data?.length || 0}</p>
+                  </div>
+                </>
 )}
             </div>
 
@@ -565,29 +572,18 @@ const fetchReport = async () => {
           <Tooltip formatter={(value) => formatCurrency(value)} />
           <Bar dataKey="totalAmount" fill="#ef4444" name="Amount" />
         </BarChart>
-      ) : activeTab === 'profit' && currentData ? (
-  <BarChart data={[
-    { name: 'Revenue', value: currentData.summary?.totalRevenue ?? currentData.revenue, fill: '#0ea5e9' },
-    { name: 'COGS', value: currentData.summary?.cogs ?? currentData.cogs, fill: '#f97316' },
-    { name: 'Expenses', value: currentData.summary?.operatingExpenses ?? currentData.operatingExpenses, fill: '#ef4444' },
-    { name: 'Net Profit', value: currentData.summary?.netProfit ?? currentData.netProfit, fill: (currentData.summary?.netProfit ?? currentData.netProfit) >= 0 ? '#10b981' : '#dc2626' },
-  ]}>
-    <CartesianGrid strokeDasharray="3 3" />
-    <XAxis dataKey="name" />
-    <YAxis />
-    <Tooltip formatter={(value) => formatCurrency(value)} />
-    <Bar dataKey="value" name="Amount">
-      {[
-        { fill: '#0ea5e9' },
-        { fill: '#f97316' },
-        { fill: '#ef4444' },
-        { fill: (currentData.summary?.netProfit ?? currentData.netProfit) >= 0 ? '#10b981' : '#dc2626' },
-      ].map((entry, index) => (
-        <Cell key={index} fill={entry.fill} />
-      ))}
-    </Bar>
-  </BarChart>
-      ) : (
+      ) : activeTab === 'profit' && stockMovementData?.data ? (
+                      <AreaChart data={stockMovementData.data}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="date" />
+                        <YAxis />
+                        <Tooltip />
+                        <Legend />
+                        <Area type="monotone" dataKey="stockOut" stackId="1" stroke="#ef4444" fill="#ef4444" fillOpacity={0.3} name="Stock Out" />
+                        <Area type="monotone" dataKey="stockIn" stackId="1" stroke="#10b981" fill="#10b981" fillOpacity={0.3} name="Stock In" />
+                        <Line type="monotone" dataKey="cumulativeStock" stroke="#3b82f6" strokeWidth={2} name="Cumulative Stock" dot={false} />
+                      </AreaChart>
+                    )  : (
         <div className="flex items-center justify-center h-full text-gray-400">No chart data available</div>
       )}
     </ResponsiveContainer>
@@ -661,7 +657,7 @@ const fetchReport = async () => {
                 )}
 
                 {/* PROFIT TAB: Breakdown */}
-                {activeTab === 'profit' && !loading && currentData && (
+                {/* {activeTab === 'profit' && !loading && currentData && (
   <div className="grid grid-cols-2 gap-4">
     <div className="bg-blue-50 rounded-lg p-3">
       <p className="text-xs text-gray-500">Profit Margin</p>
@@ -678,9 +674,37 @@ const fetchReport = async () => {
       </p>
     </div>
   </div>
-)}
+)} */}
+{/* STOCK MOVEMENT TAB: Daily Data */}
+                {activeTab === 'profit' && stockMovementData?.data && (
+                  <div className="overflow-y-auto max-h-64">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left border-b bg-gray-50">
+                          <th className="px-3 py-2">Date</th>
+                          <th className="px-3 py-2 text-right">Stock Out</th>
+                          <th className="px-3 py-2 text-right">Stock In</th>
+                          <th className="px-3 py-2 text-right">Net Change</th>
+                          <th className="px-3 py-2 text-right">Cumulative</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {stockMovementData.data.slice().reverse().slice(0, 10).map((item, idx) => (
+                          <tr key={idx} className="border-b hover:bg-gray-50">
+                            <td className="px-3 py-2 font-mono text-xs">{item.date}</td>
+                            <td className="px-3 py-2 text-right text-red-600">{item.stockOut}</td>
+                            <td className="px-3 py-2 text-right text-green-600">{item.stockIn}</td>
+                            <td className={`px-3 py-2 text-right font-medium ${item.netChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              {item.netChange >= 0 ? '+' : ''}{item.netChange}
+                            </td>
+                            <td className="px-3 py-2 text-right font-medium text-blue-600">{item.cumulativeStock}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
-
             </div>
           </div>
         )}

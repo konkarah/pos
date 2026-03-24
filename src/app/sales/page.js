@@ -382,9 +382,14 @@ export default function SalesPage() {
                   onChange={(e) => handleEditFormChange('paymentMethod', e.target.value)}
                   className="input-field w-full"
                 >
-                  <option value="CASH">Cash</option>
-                  <option value="CARD">Card</option>
-                  <option value="MPESA">M-Pesa</option>
+                        <option value="CASH">Cash</option>
+                        <option value="card">Card</option>
+                        <option value="credit">Credit</option>
+                        <option value="Paybill dtb">Paybill DTB</option>
+                        <option value="Paybill coop">Paybill COOP</option>
+                        <option value="Paybill kcb">Paybill KCB</option>
+                        <option value="Buy Goods Till">Buy Goods Till</option>
+                        <option value="mpesa">MPESA (Personal Number)</option>
                 </select>
               </div>
               <div>
