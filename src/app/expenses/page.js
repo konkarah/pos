@@ -18,6 +18,10 @@ export default function ExpensesPage() {
   const [editingExpense, setEditingExpense] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [userLocationId, setUserLocationId] = useState(null);
+  const [page, setPage] = useState(1);
+const [totalPages, setTotalPages] = useState(1);
+const [limit] = useState(10);
+const [totalExpenses, setTotalExpenses] = useState(0);
   
   // Helper function to get local date string in YYYY-MM-DD format
   const getLocalDateString = (date) => {
@@ -27,6 +31,10 @@ export default function ExpensesPage() {
     const day = String(d.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   };
+
+  useEffect(() => {
+  fetchData();
+}, [page]);
   
   const [formData, setFormData] = useState({
     locationId: '',
@@ -73,29 +81,32 @@ export default function ExpensesPage() {
     }
   };
 
-  const fetchData = async () => {
-    try {
-      const [expensesRes, locationsRes] = await Promise.all([
-        api.get('/expenses'),
-        api.get('/locations')
-      ]);
-      setExpenses(expensesRes.data);
-      setLocations(locationsRes.data);
-      
-      // Set default location for form
-      if (locationsRes.data.length > 0) {
-        if (!isAdmin && userLocationId) {
-          setFormData(prev => ({ ...prev, locationId: userLocationId }));
-        } else {
-          setFormData(prev => ({ ...prev, locationId: locationsRes.data[0].id }));
-        }
+const fetchData = async () => {
+  try {
+    const [expensesRes, locationsRes] = await Promise.all([
+      api.get(`/expenses?page=${page}&limit=${limit}`),
+      api.get('/locations')
+    ]);
+
+    setExpenses(expensesRes.data.data); // array for table
+    setTotalPages(expensesRes.data.pagination.totalPages);
+    setTotalExpenses(expensesRes.data.totalAmount || 0); // total sum across all pages
+
+    setLocations(locationsRes.data);
+
+    if (locationsRes.data.length > 0) {
+      if (!isAdmin && userLocationId) {
+        setFormData(prev => ({ ...prev, locationId: userLocationId }));
+      } else {
+        setFormData(prev => ({ ...prev, locationId: locationsRes.data[0].id }));
       }
-    } catch (error) {
-      toast.error('Failed to load expenses');
-    } finally {
-      setLoading(false);
     }
-  };
+  } catch (error) {
+    toast.error('Failed to load expenses');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -191,7 +202,7 @@ export default function ExpensesPage() {
 
   if (loading) return <div className="p-6">Loading expenses...</div>;
 
-  const totalExpenses = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
+  // const totalExpenses = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
 
   return (
     <Sidebar>
@@ -304,6 +315,27 @@ export default function ExpensesPage() {
                 )}
               </tbody>
             </table>
+            <div className="flex justify-between items-center mt-4">
+  <button
+    onClick={() => setPage(prev => Math.max(prev - 1, 1))}
+    disabled={page === 1}
+    className="btn-secondary"
+  >
+    Previous
+  </button>
+
+  <span className="text-sm text-gray-600">
+    Page {page} of {totalPages}
+  </span>
+
+  <button
+    onClick={() => setPage(prev => Math.min(prev + 1, totalPages))}
+    disabled={page === totalPages}
+    className="btn-secondary"
+  >
+    Next
+  </button>
+</div>
           </div>
         </div>
       </div>
