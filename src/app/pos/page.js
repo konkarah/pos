@@ -364,6 +364,7 @@ const filteredProducts = products.filter(product => {
                     >
                       <h3 className="font-semibold text-gray-800">{product.name}</h3>
                       <p className="text-sm text-gray-600">SKU: {product.sku}</p>
+                      <p className="text-sm text-gray-600">Buy Price: {product.buyPrice.toLocaleString()}</p>
                       {variant && (
                         <p className={`text-sm mt-2 ${inStock ? 'text-green-600' : 'text-red-600'}`}>
                           Stock: {variant.stockQuantity}
