@@ -66,7 +66,7 @@ export default function SalesPage() {
 
   useEffect(() => {
     fetchData();
-    fetchSummary(); // Fetch totals separately
+    fetchSummary();
   }, [page, debouncedSearch, filterLocation]);
 
   const fetchData = async () => {
@@ -106,7 +106,6 @@ export default function SalesPage() {
     }
   };
 
-  // New function to fetch summary totals based on filters
   const fetchSummary = async () => {
     try {
       const params = new URLSearchParams();
@@ -124,7 +123,6 @@ export default function SalesPage() {
         params.append('locationId', locationToFilter);
       }
 
-      // Fetch summary totals
       const summaryRes = await api.get(`/sales/summary?${params.toString()}`);
       
       setSummary({
@@ -135,7 +133,6 @@ export default function SalesPage() {
       
     } catch (error) {
       console.error('Failed to load summary:', error);
-      // Don't show toast for summary errors to avoid spamming
     }
   };
 
@@ -198,7 +195,7 @@ export default function SalesPage() {
       setIsEditModalOpen(false);
       setEditingSale(null);
       fetchData();
-      fetchSummary(); // Refresh summary after update
+      fetchSummary();
     } catch (error) {
       console.error('Update error:', error);
       toast.error(error.response?.data?.error || 'Failed to update sale');
@@ -216,6 +213,40 @@ export default function SalesPage() {
     setPage(1);
   };
 
+  // Helper function to render items with tooltip
+  const renderItems = (items) => {
+    if (!items || items.length === 0) return '-';
+    
+    if (items.length === 1) {
+      return (
+        <div className="text-sm">
+          <span className="font-medium">{items[0].productVariant.product.name}</span>
+          <span className="text-gray-500 ml-1">(x{items[0].quantity})</span>
+        </div>
+      );
+    }
+    
+    // For multiple items, show first item + count with tooltip
+    return (
+      <div className="relative group">
+        <div className="text-sm cursor-help">
+          <span className="font-medium">{items[0].productVariant.product.name}</span>
+          <span className="text-gray-500 ml-1">(x{items[0].quantity})</span>
+          <span className="text-xs text-gray-400 ml-1">+{items.length - 1} more</span>
+        </div>
+        <div className="absolute left-0 top-full mt-1 z-10 hidden group-hover:block bg-gray-800 text-white text-xs rounded-lg p-2 min-w-[200px] shadow-lg">
+          {items.map((item, idx) => (
+            <div key={idx} className="py-1 border-b border-gray-600 last:border-0">
+              <span className="font-medium">{item.productVariant.product.name}</span>
+              <span className="ml-2">x{item.quantity}</span>
+              <span className="ml-2 text-gray-300">{formatCurrency(item.subtotal)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   if (loading && sales.length === 0) return <div className="p-6">Loading sales history...</div>;
 
   return (
@@ -224,7 +255,7 @@ export default function SalesPage() {
       <div className="max-w-7xl mx-auto">
         <h1 className="text-3xl font-bold text-gray-800 mb-6">Sales History</h1>
 
-        {/* Summary Cards - Now showing filtered totals */}
+        {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div className="card bg-green-50 border-l-4 border-green-500">
             <p className="text-sm text-gray-600">Total Revenue</p>
@@ -322,67 +353,69 @@ export default function SalesPage() {
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Location</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Customer</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Payment</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Items</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Items Sold</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Total</th>
                 {user?.role === 'ADMIN' && (
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Actions</th>
                 )}
               </tr>
-              </thead>
-              <tbody className="divide-y">
-                {sales.length === 0 ? (
-                  <tr>
-                    <td colSpan="8" className="px-4 py-8 text-center text-gray-500">
-                      No sales found matching your filters.
+            </thead>
+            <tbody className="divide-y">
+              {sales.length === 0 ? (
+                <tr>
+                  <td colSpan="8" className="px-4 py-8 text-center text-gray-500">
+                    No sales found matching your filters.
+                  </td>
+                </tr>
+              ) : (
+                sales.map((sale) => (
+                  <tr key={sale.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-mono text-sm text-gray-800">{sale.receiptNumber}</td>
+                    <td className="px-4 py-3 text-gray-600">
+                      {new Date(sale.createdAt).toLocaleDateString()} <br/>
+                      <span className="text-xs text-gray-400">
+                        {new Date(sale.createdAt).toLocaleTimeString()}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">{sale.location.name}</td>
+                    <td className="px-4 py-3 text-gray-600">
+                      {sale.customerName || <span className="text-gray-400 italic">Walk-in</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        sale.paymentMethod === 'CASH' 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-blue-100 text-blue-800'
+                      }`}>
+                        {sale.paymentMethod}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {renderItems(sale.items)}
+                    </td>
+                    <td className="px-4 py-3 font-bold text-gray-800">
+                      {formatCurrency(sale.totalAmount)}
+                    </td>
+                    <td className="px-4 py-3">
+                      {user?.role === 'ADMIN' && (
+                        <button
+                          onClick={() => openEditModal(sale)}
+                          className="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-sm"
+                          title="Edit Sale"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                          Edit
+                        </button>
+                      )}
                     </td>
                   </tr>
-                ) : (
-                  sales.map((sale) => (
-                    <tr key={sale.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 font-mono text-sm text-gray-800">{sale.receiptNumber}</td>
-                      <td className="px-4 py-3 text-gray-600">
-                        {new Date(sale.createdAt).toLocaleDateString()} <br/>
-                        <span className="text-xs text-gray-400">
-                          {new Date(sale.createdAt).toLocaleTimeString()}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-gray-600">{sale.location.name}</td>
-                      <td className="px-4 py-3 text-gray-600">
-                        {sale.customerName || <span className="text-gray-400 italic">Walk-in</span>}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${
-                          sale.paymentMethod === 'CASH' 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-blue-100 text-blue-800'
-                        }`}>
-                          {sale.paymentMethod}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-gray-600">{sale.items.length} items</td>
-                      <td className="px-4 py-3 font-bold text-gray-800">
-                        {formatCurrency(sale.totalAmount)}
-                      </td>
-                      <td className="px-4 py-3">
-                        {user?.role === 'ADMIN' && (
-                          <button
-                            onClick={() => openEditModal(sale)}
-                            className="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-sm"
-                            title="Edit Sale"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                            Edit
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                ))
+              )}
+            </tbody>
+          </table>
           
           {meta && meta.total > 0 && (
             <div className="flex justify-between items-center mt-4">
@@ -409,7 +442,7 @@ export default function SalesPage() {
       </div>
     </div>
 
-    {/* Edit Sale Modal */}
+    {/* Edit Sale Modal - Keep existing */}
     {isEditModalOpen && editingSale && (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
         <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
