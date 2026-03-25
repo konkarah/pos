@@ -25,6 +25,8 @@ export default function ExpensesPage() {
   const [selectedLocation, setSelectedLocation] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [startDate, setStartDate] = useState('');
+const [endDate, setEndDate] = useState('');
 
   // Helper function to get local date string in YYYY-MM-DD format
   const getLocalDateString = (date) => {
@@ -72,11 +74,11 @@ export default function ExpensesPage() {
 
   useEffect(() => {
     fetchData();
-  }, [page, debouncedSearch, selectedLocation]);
+  }, [page, debouncedSearch, selectedLocation, startDate, endDate]);
 
   useEffect(() => {
     filterExpensesByLocationAndSearch();
-  }, [expenses, userLocationId, isAdmin, selectedLocation, searchQuery]);
+  }, [expenses, userLocationId, isAdmin, selectedLocation, searchQuery, startDate, endDate]);
 
   const filterExpensesByLocationAndSearch = () => {
     if (!expenses) return;
@@ -104,46 +106,57 @@ export default function ExpensesPage() {
     setFilteredExpenses(filtered);
   };
 
-  const fetchData = async () => {
-    try {
-      // Build query params for API
-      const params = new URLSearchParams({
-        page: page.toString(),
-        limit: limit.toString()
-      });
-      
-      // Add filters to API call
-      if (selectedLocation && isAdmin) {
-        params.append('locationId', selectedLocation);
-      }
-      if (debouncedSearch) {
-        params.append('search', debouncedSearch);
-      }
-
-      const [expensesRes, locationsRes] = await Promise.all([
-        api.get(`/expenses?${params.toString()}`),
-        api.get('/locations')
-      ]);
-
-      setExpenses(expensesRes.data.data);
-      setTotalPages(expensesRes.data.pagination.totalPages);
-      setTotalExpenses(expensesRes.data.totalAmount || 0);
-      setLocations(locationsRes.data);
-
-      if (locationsRes.data.length > 0) {
-        if (!isAdmin && userLocationId) {
-          setFormData(prev => ({ ...prev, locationId: userLocationId }));
-        } else {
-          setFormData(prev => ({ ...prev, locationId: locationsRes.data[0].id }));
-        }
-      }
-    } catch (error) {
-      console.error('Failed to load expenses:', error);
-      toast.error('Failed to load expenses');
-    } finally {
-      setLoading(false);
+const fetchData = async () => {
+  try {
+    // Build query params for API
+    const params = new URLSearchParams({
+      page: page.toString(),
+      limit: limit.toString()
+    });
+    
+    // Add filters to API call
+    if (selectedLocation && isAdmin) {
+      params.append('locationId', selectedLocation);
     }
-  };
+    if (debouncedSearch) {
+      params.append('search', debouncedSearch);
+    }
+    
+    // ✅ Add date filters
+    if (startDate) {
+      params.append('startDate', new Date(startDate).toISOString());
+    }
+    if (endDate) {
+      // Include the entire end day (up to 23:59:59)
+      const endOfDay = new Date(endDate);
+      endOfDay.setHours(23, 59, 59, 999);
+      params.append('endDate', endOfDay.toISOString());
+    }
+
+    const [expensesRes, locationsRes] = await Promise.all([
+      api.get(`/expenses?${params.toString()}`),
+      api.get('/locations')
+    ]);
+
+    setExpenses(expensesRes.data.data);
+    setTotalPages(expensesRes.data.pagination.totalPages);
+    setTotalExpenses(expensesRes.data.totalAmount || 0);
+    setLocations(locationsRes.data);
+
+    if (locationsRes.data.length > 0) {
+      if (!isAdmin && userLocationId) {
+        setFormData(prev => ({ ...prev, locationId: userLocationId }));
+      } else {
+        setFormData(prev => ({ ...prev, locationId: locationsRes.data[0].id }));
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load expenses:', error);
+    toast.error('Failed to load expenses');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -237,7 +250,10 @@ export default function ExpensesPage() {
   const handleClearFilters = () => {
     setSearchQuery('');
     setSelectedLocation('');
+      setStartDate('');  // ✅ Reset date filters
+  setEndDate('');
     setPage(1);
+    
   };
 
   if (loading) return <div className="p-6">Loading expenses...</div>;
@@ -290,73 +306,121 @@ export default function ExpensesPage() {
           </div>
 
           {/* Filters */}
-          <div className="card mb-6">
-            <div className="flex flex-wrap gap-4 items-center">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <input
-                  type="text"
-                  placeholder="Search by description, category, amount, or location..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="input-field pl-10 w-full"
-                />
-              </div>
-              
-              {/* Location filter - only show for admins */}
-              {isAdmin && (
-                <div className="w-48">
-                  <select
-                    value={selectedLocation}
-                    onChange={(e) => setSelectedLocation(e.target.value)}
-                    className="input-field w-full"
-                  >
-                    <option value="">All Locations</option>
-                    {locations.map(loc => (
-                      <option key={loc.id} value={loc.id}>{loc.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              
-              {(searchQuery || selectedLocation) && (
-                <button
-                  onClick={handleClearFilters}
-                  className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 bg-gray-100 rounded-lg hover:bg-gray-200"
-                >
-                  Clear Filters
-                </button>
-              )}
-            </div>
-            
-            {/* Active filters display */}
-            {(searchQuery || selectedLocation) && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {searchQuery && (
-                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
-                    Search: {searchQuery}
-                    <button
-                      onClick={() => setSearchQuery('')}
-                      className="ml-1 hover:text-blue-600"
-                    >
-                      ×
-                    </button>
-                  </span>
-                )}
-                {selectedLocation && (
-                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">
-                    Location: {locations.find(l => l.id === selectedLocation)?.name}
-                    <button
-                      onClick={() => setSelectedLocation('')}
-                      className="ml-1 hover:text-green-600"
-                    >
-                      ×
-                    </button>
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
+{/* Filters */}
+<div className="card mb-6">
+  <div className="flex flex-wrap gap-4 items-end">
+    {/* Search */}
+    <div className="flex-1 min-w-[200px]">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+        <input
+          type="text"
+          placeholder="Search by description, category, amount, or location..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="input-field pl-10 w-full"
+        />
+      </div>
+    </div>
+    
+    {/* Location Filter - Admin only */}
+    {isAdmin && (
+      <div className="w-48">
+        <select
+          value={selectedLocation}
+          onChange={(e) => setSelectedLocation(e.target.value)}
+          className="input-field w-full"
+        >
+          <option value="">All Locations</option>
+          {locations.map(loc => (
+            <option key={loc.id} value={loc.id}>{loc.name}</option>
+          ))}
+        </select>
+      </div>
+    )}
+    
+    {/* Date Filters */}
+    <div className="flex flex-wrap gap-2 items-center">
+      <input
+        type="date"
+        value={startDate}
+        onChange={(e) => { setStartDate(e.target.value); setPage(1); }}
+        className="input-field w-36"
+        max={endDate || undefined}
+        title="Start date"
+      />
+      <span className="self-center text-gray-400">→</span>
+      <input
+        type="date"
+        value={endDate}
+        onChange={(e) => { setEndDate(e.target.value); setPage(1); }}
+        className="input-field w-36"
+        min={startDate || undefined}
+        title="End date"
+      />
+      
+      {/* Quick presets */}
+      <div className="flex gap-1">
+        <button onClick={() => {
+          const today = new Date().toISOString().slice(0, 10);
+          setStartDate(today); setEndDate(today); setPage(1);
+        }} className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded" title="Today">
+          Today
+        </button>
+        <button onClick={() => {
+          const end = new Date();
+          const start = new Date(); start.setDate(start.getDate() - 7);
+          setStartDate(start.toISOString().slice(0, 10));
+          setEndDate(end.toISOString().slice(0, 10)); setPage(1);
+        }} className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded" title="Last 7 days">
+          7D
+        </button>
+        <button onClick={() => {
+          const end = new Date();
+          const start = new Date(); start.setMonth(start.getMonth() - 1);
+          setStartDate(start.toISOString().slice(0, 10));
+          setEndDate(end.toISOString().slice(0, 10)); setPage(1);
+        }} className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded" title="Last 30 days">
+          30D
+        </button>
+      </div>
+    </div>
+    
+    {/* Clear button */}
+    {(searchQuery || selectedLocation || startDate || endDate) && (
+      <button
+        onClick={handleClearFilters}
+        className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 bg-gray-100 rounded-lg hover:bg-gray-200"
+      >
+        Clear All
+      </button>
+    )}
+  </div>
+  
+  {/* Active filter badges */}
+  {(searchQuery || selectedLocation || startDate || endDate) && (
+    <div className="mt-3 flex flex-wrap gap-2">
+      {searchQuery && (
+        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
+          Search: {searchQuery}
+          <button onClick={() => setSearchQuery('')} className="ml-1 hover:text-blue-600">×</button>
+        </span>
+      )}
+      {selectedLocation && (
+        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">
+          Location: {locations.find(l => l.id === selectedLocation)?.name}
+          <button onClick={() => setSelectedLocation('')} className="ml-1 hover:text-green-600">×</button>
+        </span>
+      )}
+      {(startDate || endDate) && (
+        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-indigo-100 text-indigo-800">
+          {startDate ? new Date(startDate).toLocaleDateString() : 'Start'} → {endDate ? new Date(endDate).toLocaleDateString() : 'End'}
+          <button onClick={() => { setStartDate(''); setEndDate(''); }} className="ml-1 hover:text-indigo-600">×</button>
+        </span>
+      )}
+    </div>
+  )}
+</div>
 
           {/* Expenses Table */}
           <div className="card overflow-x-auto">
