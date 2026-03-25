@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { ShoppingCart, Package, TrendingUp, DollarSign } from 'lucide-react';
 import toast from 'react-hot-toast';
 import SidebarLayout from '@/components/Sidebar';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -19,6 +20,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [userLocationId, setUserLocationId] = useState(null);
+  const [stockGrowthData, setStockGrowthData] = useState([]);
 
   useEffect(() => {
     if (user) {
@@ -37,6 +39,19 @@ export default function Dashboard() {
       fetchDashboardData();
     }
   }, [user]);
+
+  // Fetch stock growth data for dashboard
+  useEffect(() => {
+    const fetchStockGrowth = async () => {
+      try {
+        const res = await api.get('/products/stock-growth');
+        setStockGrowthData(res.data.data || []);
+      } catch (error) {
+        toast.error('Failed to load stock growth data');
+      }
+    };
+    fetchStockGrowth();
+  }, []);
 
 const fetchDashboardData = async () => {
   try {
@@ -172,6 +187,25 @@ const fetchDashboardData = async () => {
               </div>
             );
           })}
+        </div>
+
+        {/* Stock Growth Chart */}
+        <div className="mb-8">
+          <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-blue-600" /> Stock Growth (Month-on-Month)
+          </h3>
+          <div className="bg-white rounded-lg shadow-sm p-4">
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={stockGrowthData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" />
+                <YAxis allowDecimals={false} label={{ value: 'Total Stock', angle: -90, position: 'insideLeft' }} />
+                <Tooltip />
+                <Legend />
+                <Line type="monotone" dataKey="totalStock" stroke="#2563eb" strokeWidth={2} activeDot={{ r: 8 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </div>
 
         {/* Quick Actions */}
