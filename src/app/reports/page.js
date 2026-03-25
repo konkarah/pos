@@ -221,42 +221,53 @@ const fetchReport = async () => {
   }
 };
 
-  const exportReportExcel = async () => {
-    try {
-      toast.loading('Generating Excel file...', { id: 'export' });
-      
-      const params = {};
-      if (useCustomRange && customStartDate && customEndDate) {
-        params.startDate = customStartDate;
-        params.endDate = customEndDate;
-      } else {
-        params.period = period;
-      }
-
-      const response = await api.get(`/reports/export/${activeTab}`, { 
-        params,
-        responseType: 'blob'
-      });
-
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      
-      const dateStr = new Date().toISOString().split('T')[0];
-      const locationSuffix = selectedLocation ? `-${selectedLocation}` : '';
-      link.setAttribute('download', `${activeTab}-report${locationSuffix}-${dateStr}.xlsx`);
-      
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-      
-      toast.success('Excel file downloaded!', { id: 'export' });
-    } catch (error) {
-      console.error('Export error:', error);
-      toast.error('Failed to export Excel file', { id: 'export' });
+const exportReportExcel = async () => {
+  try {
+    toast.loading('Generating Excel file...', { id: 'export' });
+    
+    const params = {};
+    if (useCustomRange && customStartDate && customEndDate) {
+      params.startDate = customStartDate;
+      params.endDate = customEndDate;
+    } else {
+      params.period = period;
     }
-  };
+    if (selectedLocation && isAdmin) {
+      params.locationId = selectedLocation;
+    }
+
+    const response = await api.get(`/reports/export/${activeTab}`, { 
+      params,
+      responseType: 'blob'
+    });
+
+    // Check if response has valid data
+    if (!response.data || response.data.size === 0) {
+      throw new Error('Empty response from server');
+    }
+
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    
+    const dateStr = new Date().toISOString().split('T')[0];
+    const locationSuffix = selectedLocation ? `-${selectedLocation}` : '';
+    link.setAttribute('download', `${activeTab}-report${locationSuffix}-${dateStr}.xlsx`);
+    
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+    
+    toast.success('Excel file downloaded!', { id: 'export' });
+  } catch (error) {
+    console.error('Export error:', error);
+    toast.error('Failed to export: ' + (error.message || 'Check filters and try again'), { 
+      id: 'export',
+      duration: 5000 
+    });
+  }
+};
 
   const getCurrentDisplayData = () => {
     return filteredReportData || reportData;
