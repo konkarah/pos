@@ -20,6 +20,8 @@ export default function SalesPage() {
   const [meta, setMeta] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [userLocationId, setUserLocationId] = useState(null);
+  const [startDate, setStartDate] = useState('');
+const [endDate, setEndDate] = useState('');
   
   // Summary totals state
   const [summary, setSummary] = useState({
@@ -69,44 +71,55 @@ export default function SalesPage() {
   useEffect(() => {
     fetchData();
     fetchSummary();
-  }, [page, debouncedSearch, filterLocation]);
+}, [page, debouncedSearch, filterLocation, startDate, endDate]);
 
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      
-      const params = new URLSearchParams({
-        page: page.toString(),
-        limit: limit.toString()
-      });
-      
-      if (debouncedSearch) {
-        params.append('search', debouncedSearch);
-      }
-      
-      let locationToFilter = filterLocation;
-      if (!isAdmin && userLocationId) {
-        locationToFilter = userLocationId;
-      }
-      
-      if (locationToFilter) {
-        params.append('locationId', locationToFilter);
-      }
-
-      const salesRes = await api.get(`/sales?${params.toString()}`);
-      const locationsRes = await api.get('/locations');
-
-      setSales(Array.isArray(salesRes.data.data) ? salesRes.data.data : []);
-      setMeta(salesRes.data.meta);
-      setLocations(locationsRes.data);
-      
-    } catch (error) {
-      toast.error('Failed to load sales data');
-      console.error(error);
-    } finally {
-      setLoading(false);
+const fetchData = async () => {
+  try {
+    setLoading(true);
+    
+    const params = new URLSearchParams({
+      page: page.toString(),
+      limit: limit.toString()
+    });
+    
+    if (debouncedSearch) {
+      params.append('search', debouncedSearch);
     }
-  };
+    
+    // ✅ Add date filters
+    if (startDate) {
+      params.append('startDate', new Date(startDate).toISOString());
+    }
+    if (endDate) {
+      // Include the entire end day (up to 23:59:59)
+      const endOfDay = new Date(endDate);
+      endOfDay.setHours(23, 59, 59, 999);
+      params.append('endDate', endOfDay.toISOString());
+    }
+    
+    let locationToFilter = filterLocation;
+    if (!isAdmin && userLocationId) {
+      locationToFilter = userLocationId;
+    }
+    
+    if (locationToFilter) {
+      params.append('locationId', locationToFilter);
+    }
+
+    const salesRes = await api.get(`/sales?${params.toString()}`);
+    const locationsRes = await api.get('/locations');
+
+    setSales(Array.isArray(salesRes.data.data) ? salesRes.data.data : []);
+    setMeta(salesRes.data.meta);
+    setLocations(locationsRes.data);
+    
+  } catch (error) {
+    toast.error('Failed to load sales data');
+    console.error(error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Add this function with your other handlers
 const handleDeleteSale = async (saleId, receiptNumber) => {
@@ -130,35 +143,45 @@ const handleDeleteSale = async (saleId, receiptNumber) => {
   }
 };
 
-  const fetchSummary = async () => {
-    try {
-      const params = new URLSearchParams();
-      
-      if (debouncedSearch) {
-        params.append('search', debouncedSearch);
-      }
-      
-      let locationToFilter = filterLocation;
-      if (!isAdmin && userLocationId) {
-        locationToFilter = userLocationId;
-      }
-      
-      if (locationToFilter) {
-        params.append('locationId', locationToFilter);
-      }
-
-      const summaryRes = await api.get(`/sales/summary?${params.toString()}`);
-      
-      setSummary({
-        totalRevenue: summaryRes.data.totalRevenue || 0,
-        totalTransactions: summaryRes.data.totalTransactions || 0,
-        averageSale: summaryRes.data.averageSale || 0
-      });
-      
-    } catch (error) {
-      console.error('Failed to load summary:', error);
+const fetchSummary = async () => {
+  try {
+    const params = new URLSearchParams();
+    
+    if (debouncedSearch) {
+      params.append('search', debouncedSearch);
     }
-  };
+    
+    // ✅ Add date filters to summary too
+    if (startDate) {
+      params.append('startDate', new Date(startDate).toISOString());
+    }
+    if (endDate) {
+      const endOfDay = new Date(endDate);
+      endOfDay.setHours(23, 59, 59, 999);
+      params.append('endDate', endOfDay.toISOString());
+    }
+    
+    let locationToFilter = filterLocation;
+    if (!isAdmin && userLocationId) {
+      locationToFilter = userLocationId;
+    }
+    
+    if (locationToFilter) {
+      params.append('locationId', locationToFilter);
+    }
+
+    const summaryRes = await api.get(`/sales/summary?${params.toString()}`);
+    
+    setSummary({
+      totalRevenue: summaryRes.data.totalRevenue || 0,
+      totalTransactions: summaryRes.data.totalTransactions || 0,
+      averageSale: summaryRes.data.averageSale || 0
+    });
+    
+  } catch (error) {
+    console.error('Failed to load summary:', error);
+  }
+};
 
   const openEditModal = (sale) => {
     if (user?.role !== 'ADMIN') {
@@ -230,12 +253,14 @@ const handleDeleteSale = async (saleId, receiptNumber) => {
     return `KES ${parseFloat(amount).toLocaleString()}`;
   };
 
-  const handleClearFilters = () => {
-    setSearchQuery('');
-    setDebouncedSearch('');
-    setFilterLocation('');
-    setPage(1);
-  };
+const handleClearFilters = () => {
+  setSearchQuery('');
+  setDebouncedSearch('');
+  setFilterLocation('');
+  setStartDate('');  // ✅ Reset date filters
+  setEndDate('');
+  setPage(1);
+};
 
   // Helper function to render items with tooltip
   const renderItems = (items) => {
@@ -305,67 +330,121 @@ const handleDeleteSale = async (saleId, receiptNumber) => {
         </div>
 
         {/* Filters */}
-        <div className="card mb-6">
-          <div className="flex flex-wrap gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="text"
-                placeholder="Search by Receipt # or Customer..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="input-field pl-10 w-full"
-              />
-            </div>
-            
-            {isAdmin && (
-              <div className="w-full md:w-64">
-                <select
-                  value={filterLocation}
-                  onChange={(e) => setFilterLocation(e.target.value)}
-                  className="input-field w-full"
-                >
-                  <option value="">All Locations</option>
-                  {locations.map(loc => (
-                    <option key={loc.id} value={loc.id}>{loc.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-            
-            {!isAdmin && userLocationId && (
-              <div className="w-full md:w-64 px-3 py-2 bg-gray-100 rounded-lg text-sm text-gray-600">
-                <span className="font-medium">Location:</span> {locations.find(l => l.id === userLocationId)?.name || 'My Location'}
-              </div>
-            )}
-            
-            {(searchQuery || filterLocation) && (
-              <button
-                onClick={handleClearFilters}
-                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 bg-gray-100 rounded-lg hover:bg-gray-200"
-              >
-                Clear Filters
-              </button>
-            )}
-          </div>
-          
-          {(searchQuery || filterLocation) && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {searchQuery && (
-                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
-                  Search: {searchQuery}
-                  <button onClick={() => setSearchQuery('')} className="ml-1 hover:text-blue-600">×</button>
-                </span>
-              )}
-              {filterLocation && (
-                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">
-                  Location: {locations.find(l => l.id === filterLocation)?.name}
-                  <button onClick={() => setFilterLocation('')} className="ml-1 hover:text-green-600">×</button>
-                </span>
-              )}
-            </div>
-          )}
-        </div>
+{/* Filters */}
+<div className="card mb-6">
+  <div className="flex flex-wrap gap-4 items-end">
+    {/* Search */}
+    <div className="flex-1 min-w-[200px]">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+        <input
+          type="text"
+          placeholder="Search by Receipt # or Customer..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="input-field pl-10 w-full"
+        />
+      </div>
+    </div>
+    
+    {/* Location Filter */}
+    {isAdmin && (
+      <div className="w-full md:w-48">
+        <select
+          value={filterLocation}
+          onChange={(e) => setFilterLocation(e.target.value)}
+          className="input-field w-full"
+        >
+          <option value="">All Locations</option>
+          {locations.map(loc => (
+            <option key={loc.id} value={loc.id}>{loc.name}</option>
+          ))}
+        </select>
+      </div>
+    )}
+    
+    {/* Date Filters */}
+    <div className="flex flex-wrap gap-2">
+      <input
+        type="date"
+        value={startDate}
+        onChange={(e) => { setStartDate(e.target.value); setPage(1); }}
+        className="input-field w-36"
+        max={endDate || undefined}
+        title="Start date"
+      />
+      <span className="self-center text-gray-400">→</span>
+      <input
+        type="date"
+        value={endDate}
+        onChange={(e) => { setEndDate(e.target.value); setPage(1); }}
+        className="input-field w-36"
+        min={startDate || undefined}
+        title="End date"
+      />
+    </div>
+    
+    {/* Quick presets */}
+    <div className="flex gap-1">
+      <button onClick={() => {
+        const today = new Date().toISOString().slice(0, 10);
+        setStartDate(today); setEndDate(today); setPage(1);
+      }} className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded">
+        Today
+      </button>
+      <button onClick={() => {
+        const end = new Date();
+        const start = new Date(); start.setDate(start.getDate() - 7);
+        setStartDate(start.toISOString().slice(0, 10));
+        setEndDate(end.toISOString().slice(0, 10)); setPage(1);
+      }} className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded">
+        7D
+      </button>
+      <button onClick={() => {
+        const end = new Date();
+        const start = new Date(); start.setMonth(start.getMonth() - 1);
+        setStartDate(start.toISOString().slice(0, 10));
+        setEndDate(end.toISOString().slice(0, 10)); setPage(1);
+      }} className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded">
+        30D
+      </button>
+    </div>
+    
+    {/* Clear button */}
+    {(searchQuery || filterLocation || startDate || endDate) && (
+      <button
+        onClick={handleClearFilters}
+        className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 bg-gray-100 rounded-lg hover:bg-gray-200"
+      >
+        Clear All
+      </button>
+    )}
+  </div>
+  
+  {/* Active filter badges */}
+  {(searchQuery || filterLocation || startDate || endDate) && (
+    <div className="mt-3 flex flex-wrap gap-2">
+      {searchQuery && (
+        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
+          Search: {searchQuery}
+          <button onClick={() => setSearchQuery('')} className="ml-1 hover:text-blue-600">×</button>
+        </span>
+      )}
+      {filterLocation && (
+        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">
+          Location: {locations.find(l => l.id === filterLocation)?.name}
+          <button onClick={() => setFilterLocation('')} className="ml-1 hover:text-green-600">×</button>
+        </span>
+      )}
+      {(startDate || endDate) && (
+        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-indigo-100 text-indigo-800">
+          {startDate ? new Date(startDate).toLocaleDateString() : 'Start'} → {endDate ? new Date(endDate).toLocaleDateString() : 'End'}
+          <button onClick={() => { setStartDate(''); setEndDate(''); }} className="ml-1 hover:text-indigo-600">×</button>
+        </span>
+      )}
+    </div>
+  )}
+</div>
 
         {/* Sales Table */}
         <div className="card overflow-x-auto">
