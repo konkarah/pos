@@ -74,9 +74,12 @@ const fetchDashboardData = async () => {
     ]);
 
     const allSales = Array.isArray(salesRes.data.data) ? salesRes.data.data : [];
+    
+    // ✅ Extract the real total count from API response
+    const totalProductsCount = productsRes.data.total; 
+    
     const allProducts = Array.isArray(productsRes.data.data) ? productsRes.data.data : [];
 
-    // For employees, filter to their branch only
     const isEmployee = user?.role === 'EMPLOYEE';
     const locationId = user?.locationId;
 
@@ -84,6 +87,8 @@ const fetchDashboardData = async () => {
       ? allSales.filter(sale => sale.locationId === locationId)
       : allSales;
 
+    // For employees: we still need to filter products for low-stock calculation
+    // But totalProducts should reflect ALL products (or all at location for employees)
     const products = isEmployee
       ? allProducts.filter(p => p.variants.some(v => v.locationId === locationId))
       : allProducts;
@@ -100,11 +105,16 @@ const fetchDashboardData = async () => {
       });
     });
 
+    // ✅ For employees, calculate filtered total; for admin, use API total
+    const displayedTotalProducts = isEmployee 
+      ? products.length  // filtered count for employee view
+      : totalProductsCount; // actual total for admin
+
     setStats({
       todaySales: sales.length,
       todayRevenue,
       lowStockItems: lowStockCount,
-      totalProducts: products.length
+      totalProducts: displayedTotalProducts  // ✅ Now accurate!
     });
   } catch (error) {
     toast.error('Failed to load dashboard data');
@@ -214,56 +224,58 @@ const fetchDashboardData = async () => {
           </div>
         </div>
       </div>
+      
       {/* Stock Growth Chart */}
-<div className="bg-white rounded-lg shadow-sm p-6 mt-6 max-w-7xl justify-center mx-auto">
-  <div className="flex items-center justify-between mb-4">
-    <h3 className="text-lg font-semibold text-gray-800">Stock Value Growth</h3>
-    <select
-      value={stockPeriod}
-      onChange={(e) => setStockPeriod(e.target.value)}
-      className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-600 focus:outline-none focus:ring-2 focus:ring-primary-500"
-    >
-      <option value="monthly">This Month</option>
-      <option value="quarterly">Last 3 Months</option>
-      <option value="semi-annually">Last 6 Months</option>
-      <option value="yearly">Last 12 Months</option>
-      <option value="year-on-year">Year on Year</option>
-    </select>
+{/* Stock Growth Chart - Admin Only */}
+{isAdmin && (
+  <div className="bg-white rounded-lg shadow-sm p-6 mt-6 max-w-7xl justify-center mx-auto">
+    <div className="flex items-center justify-between mb-4">
+      <h3 className="text-lg font-semibold text-gray-800">Stock Value Growth</h3>
+      <select
+        value={stockPeriod}
+        onChange={(e) => setStockPeriod(e.target.value)}
+        className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-600 focus:outline-none focus:ring-2 focus:ring-primary-500"
+      >
+        <option value="monthly">This Month</option>
+        <option value="quarterly">Last 3 Months</option>
+        <option value="semi-annually">Last 6 Months</option>
+        <option value="yearly">Last 12 Months</option>
+        <option value="year-on-year">Year on Year</option>
+      </select>
+    </div>
+
+    {stockLoading ? (
+      <div className="h-48 flex items-center justify-center text-gray-400 text-sm">
+        Loading...
+      </div>
+    ) : stockGrowth.length === 0 ? (
+      <div className="h-48 flex items-center justify-center text-gray-400 text-sm">
+        No stock data available
+      </div>
+    ) : (
+      <ResponsiveContainer width="100%" height={220}>
+        <LineChart data={stockGrowth} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+          <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+          <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `KES ${(v/1000).toFixed(0)}k`} />
+          <Tooltip
+            formatter={(value) => [`KES ${value.toLocaleString()}`, 'Stock Value']}
+            labelStyle={{ fontWeight: 600 }}
+          />
+          <Line
+            type="monotone"
+            dataKey="stockValue"
+            stroke="#6366f1"
+            strokeWidth={2}
+            dot={{ r: 4, fill: '#6366f1' }}
+            activeDot={{ r: 6 }}
+            name="Stock Value"
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    )}
   </div>
-
-  
-
-  {stockLoading ? (
-    <div className="h-48 flex items-center justify-center text-gray-400 text-sm">
-      Loading...
-    </div>
-  ) : stockGrowth.length === 0 ? (
-    <div className="h-48 flex items-center justify-center text-gray-400 text-sm">
-      No stock data available
-    </div>
-  ) : (
-    <ResponsiveContainer width="100%" height={220}>
-<LineChart data={stockGrowth} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
-  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-  <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-  <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `KES ${(v/1000).toFixed(0)}k`} />
-  <Tooltip
-    formatter={(value) => [`KES ${value.toLocaleString()}`, 'Stock Value']}
-    labelStyle={{ fontWeight: 600 }}
-  />
-  <Line
-    type="monotone"
-    dataKey="stockValue"
-    stroke="#6366f1"
-    strokeWidth={2}
-    dot={{ r: 4, fill: '#6366f1' }}
-    activeDot={{ r: 6 }}
-    name="Stock Value"
-  />
-</LineChart>
-    </ResponsiveContainer>
-  )}
-</div>
+)}
     </SidebarLayout>
   );
 }
