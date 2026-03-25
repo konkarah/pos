@@ -13,6 +13,7 @@ export default function SalesPage() {
   const [filteredSales, setFilteredSales] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filterLocation, setFilterLocation] = useState('');
   const [locations, setLocations] = useState([]);
   const [page, setPage] = useState(1);
@@ -33,61 +34,76 @@ export default function SalesPage() {
     items: []
   });
 
+  // Debounce search input
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+      setPage(1); // Reset to first page when search changes
+    }, 500);
+    return () => clearTimeout(timeout);
+  }, [searchQuery]);
+
+  // Reset page when location filter changes
+  useEffect(() => {
+    setPage(1);
+  }, [filterLocation]);
+
   useEffect(() => {
     if (user) {
       setIsAdmin(user.role === 'ADMIN');
       setUserLocationId(user.locationId);
+      // For employees, set their location as default filter
+      if (user.role !== 'ADMIN' && user.locationId) {
+        setFilterLocation(user.locationId);
+      }
     }
   }, [user]);
 
   useEffect(() => {
     fetchData();
-  }, [page]);
+  }, [page, debouncedSearch, filterLocation]);
 
-  useEffect(() => {
-    filterSalesByLocationAndSearch();
-  }, [sales, searchQuery, filterLocation, userLocationId, isAdmin]);
-
-  const filterSalesByLocationAndSearch = () => {
-    if (!sales) return;
-    
-    let filtered = [...sales];
-    
-    // Filter by location based on user role
-    if (!isAdmin && userLocationId) {
-      filtered = filtered.filter(sale => sale.locationId === userLocationId);
-    } else if (filterLocation && isAdmin) {
-      // Only apply location filter if admin has selected a specific location
-      filtered = filtered.filter(sale => sale.locationId === filterLocation);
-    }
-    
-    // Apply search filter
-    if (searchQuery) {
-      filtered = filtered.filter(sale => 
-        sale.receiptNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        sale.customerName?.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-    
-    setFilteredSales(filtered);
-  };
+  // No client-side filtering - let the backend handle it
+  // filteredSales will be the same as sales since backend already filters
 
   const fetchData = async () => {
     try {
       setLoading(true);
       
-      // Only fetch all sales if admin, otherwise fetch all but filter client-side
+      // Build query parameters
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: limit.toString()
+      });
+      
+      // Add search filter if present
+      if (debouncedSearch) {
+        params.append('search', debouncedSearch);
+      }
+      
+      // Determine location filter
+      let locationToFilter = filterLocation;
+      if (!isAdmin && userLocationId) {
+        locationToFilter = userLocationId;
+      }
+      
+      if (locationToFilter) {
+        params.append('locationId', locationToFilter);
+      }
+
       const [salesRes, locationsRes] = await Promise.all([
-        api.get(`/sales?page=${page}&limit=${limit}`),
+        api.get(`/sales?${params.toString()}`),
         api.get('/locations')
       ]);
 
       setSales(Array.isArray(salesRes.data.data) ? salesRes.data.data : []);
+      setFilteredSales(Array.isArray(salesRes.data.data) ? salesRes.data.data : []);
       setMeta(salesRes.data.meta);
       setLocations(locationsRes.data);
       
     } catch (error) {
       toast.error('Failed to load sales data');
+      console.error(error);
     } finally {
       setLoading(false);
     }
@@ -162,13 +178,11 @@ export default function SalesPage() {
     return `KES ${parseFloat(amount).toLocaleString()}`;
   };
 
-  const downloadReceipt = async (saleId, receiptNumber) => {
-    try {
-      const response = await api.get(`/sales/${saleId}`);
-      toast.success(`Receipt ${receiptNumber} downloaded (simulated)`);
-    } catch (error) {
-      toast.error('Failed to download receipt');
-    }
+  const handleClearFilters = () => {
+    setSearchQuery('');
+    setDebouncedSearch('');
+    setFilterLocation('');
+    setPage(1);
   };
 
   if (loading) return <div className="p-6">Loading sales history...</div>;
@@ -200,38 +214,77 @@ export default function SalesPage() {
         </div>
 
         {/* Filters */}
-        <div className="card mb-6 flex flex-col md:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-            <input
-              type="text"
-              placeholder="Search by Receipt # or Customer..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="input-field pl-10"
-            />
+        <div className="card mb-6">
+          <div className="flex flex-wrap gap-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <input
+                type="text"
+                placeholder="Search by Receipt # or Customer..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="input-field pl-10 w-full"
+              />
+            </div>
+            
+            {/* Only show location filter for admin users */}
+            {isAdmin && (
+              <div className="w-full md:w-64">
+                <select
+                  value={filterLocation}
+                  onChange={(e) => setFilterLocation(e.target.value)}
+                  className="input-field w-full"
+                >
+                  <option value="">All Locations</option>
+                  {locations.map(loc => (
+                    <option key={loc.id} value={loc.id}>{loc.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            
+            {/* Show current location for non-admin users */}
+            {!isAdmin && userLocationId && (
+              <div className="w-full md:w-64 px-3 py-2 bg-gray-100 rounded-lg text-sm text-gray-600">
+                <span className="font-medium">Location:</span> {locations.find(l => l.id === userLocationId)?.name || 'My Location'}
+              </div>
+            )}
+            
+            {(searchQuery || filterLocation) && (
+              <button
+                onClick={handleClearFilters}
+                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 bg-gray-100 rounded-lg hover:bg-gray-200"
+              >
+                Clear Filters
+              </button>
+            )}
           </div>
           
-          {/* Only show location filter for admin users */}
-          {isAdmin && (
-            <div className="w-full md:w-64">
-              <select
-                value={filterLocation}
-                onChange={(e) => setFilterLocation(e.target.value)}
-                className="input-field"
-              >
-                <option value="">All Locations</option>
-                {locations.map(loc => (
-                  <option key={loc.id} value={loc.id}>{loc.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
-          
-          {/* Show current location for non-admin users */}
-          {!isAdmin && userLocationId && (
-            <div className="w-full md:w-64 px-3 py-2 bg-gray-100 rounded-lg text-sm text-gray-600">
-              <span className="font-medium">Location:</span> {locations.find(l => l.id === userLocationId)?.name || 'My Location'}
+          {/* Active filters display */}
+          {(searchQuery || filterLocation) && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {searchQuery && (
+                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
+                  Search: {searchQuery}
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="ml-1 hover:text-blue-600"
+                  >
+                    ×
+                  </button>
+                </span>
+              )}
+              {filterLocation && (
+                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">
+                  Location: {locations.find(l => l.id === filterLocation)?.name}
+                  <button
+                    onClick={() => setFilterLocation('')}
+                    className="ml-1 hover:text-green-600"
+                  >
+                    ×
+                  </button>
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -252,84 +305,84 @@ export default function SalesPage() {
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Actions</th>
                 )}
               </tr>
-            </thead>
-            <tbody className="divide-y">
-              {filteredSales.length === 0 ? (
-                <tr>
-                  <td colSpan="8" className="px-4 py-8 text-center text-gray-500">
-                    {!isAdmin && userLocationId 
-                      ? 'No sales found for your location.'
-                      : 'No sales found matching your filters.'}
-                  </td>
-                </tr>
-              ) : (
-                filteredSales.map((sale) => (
-                  <tr key={sale.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-mono text-sm text-gray-800">{sale.receiptNumber}</td>
-                    <td className="px-4 py-3 text-gray-600">
-                      {new Date(sale.createdAt).toLocaleDateString()} <br/>
-                      <span className="text-xs text-gray-400">
-                        {new Date(sale.createdAt).toLocaleTimeString()}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">{sale.location.name}</td>
-                    <td className="px-4 py-3 text-gray-600">
-                      {sale.customerName || <span className="text-gray-400 italic">Walk-in</span>}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        sale.paymentMethod === 'CASH' 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-blue-100 text-blue-800'
-                      }`}>
-                        {sale.paymentMethod}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">{sale.items.length} items</td>
-                    <td className="px-4 py-3 font-bold text-gray-800">
-                      {formatCurrency(sale.totalAmount)}
-                    </td>
-                    <td className="px-4 py-3">
-                      {user?.role === 'ADMIN' && (
-                        <button
-                          onClick={() => openEditModal(sale)}
-                          className="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-sm"
-                          title="Edit Sale"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                          Edit
-                        </button>
-                      )}
+              </thead>
+              <tbody className="divide-y">
+                {filteredSales.length === 0 ? (
+                  <tr>
+                    <td colSpan="8" className="px-4 py-8 text-center text-gray-500">
+                      No sales found matching your filters.
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  filteredSales.map((sale) => (
+                    <tr key={sale.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 font-mono text-sm text-gray-800">{sale.receiptNumber}</td>
+                      <td className="px-4 py-3 text-gray-600">
+                        {new Date(sale.createdAt).toLocaleDateString()} <br/>
+                        <span className="text-xs text-gray-400">
+                          {new Date(sale.createdAt).toLocaleTimeString()}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-gray-600">{sale.location.name}</td>
+                      <td className="px-4 py-3 text-gray-600">
+                        {sale.customerName || <span className="text-gray-400 italic">Walk-in</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${
+                          sale.paymentMethod === 'CASH' 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-blue-100 text-blue-800'
+                        }`}>
+                          {sale.paymentMethod}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-gray-600">{sale.items.length} items</td>
+                      <td className="px-4 py-3 font-bold text-gray-800">
+                        {formatCurrency(sale.totalAmount)}
+                      </td>
+                      <td className="px-4 py-3">
+                        {user?.role === 'ADMIN' && (
+                          <button
+                            onClick={() => openEditModal(sale)}
+                            className="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-sm"
+                            title="Edit Sale"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                            Edit
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           
           {/* Pagination */}
-          <div className="flex justify-between items-center mt-4">
-            <button
-              disabled={page === 1}
-              onClick={() => setPage(prev => prev - 1)}
-              className="px-4 py-2 bg-gray-200 rounded disabled:opacity-50"
-            >
-              Previous
-            </button>
-            <span className="text-sm text-gray-600">
-              Page {meta?.page} of {meta?.lastPage}
-            </span>
-            <button
-              disabled={page === meta?.lastPage}
-              onClick={() => setPage(prev => prev + 1)}
-              className="px-4 py-2 bg-gray-200 rounded disabled:opacity-50"
-            >
-              Next
-            </button>
-          </div>
+          {meta && meta.total > 0 && (
+            <div className="flex justify-between items-center mt-4">
+              <button
+                disabled={page === 1}
+                onClick={() => setPage(prev => prev - 1)}
+                className="px-4 py-2 bg-gray-200 rounded disabled:opacity-50"
+              >
+                Previous
+              </button>
+              <span className="text-sm text-gray-600">
+                Page {meta.page} of {meta.lastPage} ({meta.total} total sales)
+              </span>
+              <button
+                disabled={page === meta.lastPage}
+                onClick={() => setPage(prev => prev + 1)}
+                className="px-4 py-2 bg-gray-200 rounded disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -382,14 +435,14 @@ export default function SalesPage() {
                   onChange={(e) => handleEditFormChange('paymentMethod', e.target.value)}
                   className="input-field w-full"
                 >
-                        <option value="CASH">Cash</option>
-                        <option value="card">Card</option>
-                        <option value="credit">Credit</option>
-                        <option value="Paybill dtb">Paybill DTB</option>
-                        <option value="Paybill coop">Paybill COOP</option>
-                        <option value="Paybill kcb">Paybill KCB</option>
-                        <option value="Buy Goods Till">Buy Goods Till</option>
-                        <option value="mpesa">MPESA (Personal Number)</option>
+                  <option value="CASH">Cash</option>
+                  <option value="card">Card</option>
+                  <option value="credit">Credit</option>
+                  <option value="Paybill dtb">Paybill DTB</option>
+                  <option value="Paybill coop">Paybill COOP</option>
+                  <option value="Paybill kcb">Paybill KCB</option>
+                  <option value="Buy Goods Till">Buy Goods Till</option>
+                  <option value="mpesa">MPESA (Personal Number)</option>
                 </select>
               </div>
               <div>
