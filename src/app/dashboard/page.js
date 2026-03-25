@@ -21,26 +21,53 @@ export default function Dashboard() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [userLocationId, setUserLocationId] = useState(null);
   const [stockGrowth, setStockGrowth] = useState([]);
-const [stockPeriod, setStockPeriod] = useState('semi-annually');
-const [stockLoading, setStockLoading] = useState(false);
+  const [stockPeriod, setStockPeriod] = useState('semi-annually');
+  const [stockLoading, setStockLoading] = useState(false);
+  
+  // State for location filter
+  const [locations, setLocations] = useState([]);
+  const [selectedLocationId, setSelectedLocationId] = useState(null);
 
-useEffect(() => {
-  if (user) fetchStockGrowth();
-}, [user, stockPeriod]);
+  useEffect(() => {
+    if (user) fetchStockGrowth();
+  }, [user, stockPeriod, selectedLocationId]);
 
-const fetchStockGrowth = async () => {
-  setStockLoading(true);
-  try {
-    const params = { period: stockPeriod };
-    if (isAdmin && userLocationId) params.locationId = userLocationId;
-    const res = await api.get('/products/stock-growth', { params });
-    setStockGrowth(res.data.data);
-  } catch (error) {
-    console.error('Failed to load stock growth');
-  } finally {
-    setStockLoading(false);
-  }
-};
+  const fetchStockGrowth = async () => {
+    setStockLoading(true);
+    try {
+      const params = { period: stockPeriod };
+      // Only add locationId if a specific location is selected (not "All Locations")
+      if (selectedLocationId) {
+        params.locationId = selectedLocationId;
+      }
+      // If no locationId is passed, the API will return data for all locations
+      const res = await api.get('/products/stock-growth', { params });
+      setStockGrowth(res.data.data);
+    } catch (error) {
+      console.error('Failed to load stock growth');
+      toast.error('Failed to load stock growth data');
+    } finally {
+      setStockLoading(false);
+    }
+  };
+
+  // Fetch locations for admin
+  useEffect(() => {
+    if (isAdmin) {
+      fetchLocations();
+    }
+  }, [isAdmin]);
+
+  const fetchLocations = async () => {
+    try {
+      const res = await api.get('/locations');
+      setLocations(res.data);
+      // ✅ DON'T set any location as default - keep selectedLocationId as null for "All Locations"
+      // This ensures "All Locations" is the default view
+    } catch (error) {
+      console.error('Failed to fetch locations');
+    }
+  };
 
   useEffect(() => {
     if (user) {
@@ -60,69 +87,64 @@ const fetchStockGrowth = async () => {
     }
   }, [user]);
 
-const fetchDashboardData = async () => {
-  try {
-    const now = new Date();
-    const startOfDay = new Date(now);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(now);
-    endOfDay.setHours(23, 59, 59, 999);
+  const fetchDashboardData = async () => {
+    try {
+      const now = new Date();
+      const startOfDay = new Date(now);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(now);
+      endOfDay.setHours(23, 59, 59, 999);
 
-    const [salesRes, productsRes] = await Promise.all([
-      api.get(`/sales?startDate=${startOfDay.toISOString()}&endDate=${endOfDay.toISOString()}`),
-      api.get('/products?page=1&limit=1000')
-    ]);
+      const [salesRes, productsRes] = await Promise.all([
+        api.get(`/sales?startDate=${startOfDay.toISOString()}&endDate=${endOfDay.toISOString()}`),
+        api.get('/products?page=1&limit=1000')
+      ]);
 
-    const allSales = Array.isArray(salesRes.data.data) ? salesRes.data.data : [];
-    
-    // ✅ Extract the real total count from API response
-    const totalProductsCount = productsRes.data.total; 
-    
-    const allProducts = Array.isArray(productsRes.data.data) ? productsRes.data.data : [];
+      const allSales = Array.isArray(salesRes.data.data) ? salesRes.data.data : [];
+      
+      const totalProductsCount = productsRes.data.total; 
+      const allProducts = Array.isArray(productsRes.data.data) ? productsRes.data.data : [];
 
-    const isEmployee = user?.role === 'EMPLOYEE';
-    const locationId = user?.locationId;
+      const isEmployee = user?.role === 'EMPLOYEE';
+      const locationId = user?.locationId;
 
-    const sales = isEmployee
-      ? allSales.filter(sale => sale.locationId === locationId)
-      : allSales;
+      const sales = isEmployee
+        ? allSales.filter(sale => sale.locationId === locationId)
+        : allSales;
 
-    // For employees: we still need to filter products for low-stock calculation
-    // But totalProducts should reflect ALL products (or all at location for employees)
-    const products = isEmployee
-      ? allProducts.filter(p => p.variants.some(v => v.locationId === locationId))
-      : allProducts;
+      const products = isEmployee
+        ? allProducts.filter(p => p.variants.some(v => v.locationId === locationId))
+        : allProducts;
 
-    const todayRevenue = sales.reduce((sum, sale) => sum + (sale.totalAmount || 0), 0);
+      const todayRevenue = sales.reduce((sum, sale) => sum + (sale.totalAmount || 0), 0);
 
-    let lowStockCount = 0;
-    products.forEach(product => {
-      const variants = isEmployee
-        ? product.variants.filter(v => v.locationId === locationId)
-        : product.variants;
-      variants.forEach(variant => {
-        if (variant.stockQuantity < 5) lowStockCount++;
+      let lowStockCount = 0;
+      products.forEach(product => {
+        const variants = isEmployee
+          ? product.variants.filter(v => v.locationId === locationId)
+          : product.variants;
+        variants.forEach(variant => {
+          if (variant.stockQuantity < 5) lowStockCount++;
+        });
       });
-    });
 
-    // ✅ For employees, calculate filtered total; for admin, use API total
-    const displayedTotalProducts = isEmployee 
-      ? products.length  // filtered count for employee view
-      : totalProductsCount; // actual total for admin
+      const displayedTotalProducts = isEmployee 
+        ? products.length
+        : totalProductsCount;
 
-    setStats({
-      todaySales: sales.length,
-      todayRevenue,
-      lowStockItems: lowStockCount,
-      totalProducts: displayedTotalProducts  // ✅ Now accurate!
-    });
-  } catch (error) {
-    toast.error('Failed to load dashboard data');
-    console.error(error);
-  } finally {
-    setLoading(false);
-  }
-};
+      setStats({
+        todaySales: sales.length,
+        todayRevenue,
+        lowStockItems: lowStockCount,
+        totalProducts: displayedTotalProducts
+      });
+    } catch (error) {
+      toast.error('Failed to load dashboard data');
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const statCards = [
     {
@@ -225,57 +247,72 @@ const fetchDashboardData = async () => {
         </div>
       </div>
       
-      {/* Stock Growth Chart */}
-{/* Stock Growth Chart - Admin Only */}
-{isAdmin && (
-  <div className="bg-white rounded-lg shadow-sm p-6 mt-6 max-w-7xl justify-center mx-auto">
-    <div className="flex items-center justify-between mb-4">
-      <h3 className="text-lg font-semibold text-gray-800">Stock Value Growth</h3>
-      <select
-        value={stockPeriod}
-        onChange={(e) => setStockPeriod(e.target.value)}
-        className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-600 focus:outline-none focus:ring-2 focus:ring-primary-500"
-      >
-        <option value="monthly">This Month</option>
-        <option value="quarterly">Last 3 Months</option>
-        <option value="semi-annually">Last 6 Months</option>
-        <option value="yearly">Last 12 Months</option>
-        <option value="year-on-year">Year on Year</option>
-      </select>
-    </div>
+      {/* Stock Growth Chart - Admin Only */}
+      {isAdmin && (
+        <div className="bg-white rounded-lg shadow-sm p-6 mt-6 max-w-7xl justify-center mx-auto">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-800">Stock Value Growth</h3>
+            <div className="flex gap-3">
+              {/* Location Filter Dropdown with "All Locations" as default */}
+              <select
+                value={selectedLocationId || ''}
+                onChange={(e) => setSelectedLocationId(e.target.value || null)}
+                className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-600 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="">All Locations</option>
+                {locations.map(location => (
+                  <option key={location.id} value={location.id}>
+                    {location.name}
+                  </option>
+                ))}
+              </select>
+              
+              <select
+                value={stockPeriod}
+                onChange={(e) => setStockPeriod(e.target.value)}
+                className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-600 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="monthly">This Month</option>
+                <option value="quarterly">Last 3 Months</option>
+                <option value="semi-annually">Last 6 Months</option>
+                <option value="yearly">Last 12 Months</option>
+                <option value="year-on-year">Year on Year</option>
+              </select>
+            </div>
+          </div>
 
-    {stockLoading ? (
-      <div className="h-48 flex items-center justify-center text-gray-400 text-sm">
-        Loading...
-      </div>
-    ) : stockGrowth.length === 0 ? (
-      <div className="h-48 flex items-center justify-center text-gray-400 text-sm">
-        No stock data available
-      </div>
-    ) : (
-      <ResponsiveContainer width="100%" height={220}>
-        <LineChart data={stockGrowth} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-          <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-          <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `KES ${(v/1000).toFixed(0)}k`} />
-          <Tooltip
-            formatter={(value) => [`KES ${value.toLocaleString()}`, 'Stock Value']}
-            labelStyle={{ fontWeight: 600 }}
-          />
-          <Line
-            type="monotone"
-            dataKey="stockValue"
-            stroke="#6366f1"
-            strokeWidth={2}
-            dot={{ r: 4, fill: '#6366f1' }}
-            activeDot={{ r: 6 }}
-            name="Stock Value"
-          />
-        </LineChart>
-      </ResponsiveContainer>
-    )}
-  </div>
-)}
+          {stockLoading ? (
+            <div className="h-48 flex items-center justify-center text-gray-400 text-sm">
+              Loading...
+            </div>
+          ) : stockGrowth.length === 0 ? (
+            <div className="h-48 flex items-center justify-center text-gray-400 text-sm">
+              No stock data available
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={stockGrowth} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `KES ${(v/1000).toFixed(0)}k`} />
+                <Tooltip
+                  formatter={(value) => [`KES ${value.toLocaleString()}`, 'Stock Value']}
+                  labelStyle={{ fontWeight: 600 }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="stockValue"
+                  stroke="#6366f1"
+                  strokeWidth={2}
+                  dot={{ r: 4, fill: '#6366f1' }}
+                  activeDot={{ r: 6 }}
+                  name="Stock Value"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      )}
     </SidebarLayout>
   );
 }
