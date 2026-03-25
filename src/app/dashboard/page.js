@@ -227,6 +227,7 @@ const fetchDashboardData = async () => {
       <option value="quarterly">Last 3 Months</option>
       <option value="semi-annually">Last 6 Months</option>
       <option value="yearly">Last 12 Months</option>
+      <option value="year-on-year">Year on Year</option>
     </select>
   </div>
 
