@@ -10,7 +10,6 @@ import { useAuth } from '@/context/AuthContext';
 export default function SalesPage() {
   const { user } = useAuth();
   const [sales, setSales] = useState([]);
-  const [filteredSales, setFilteredSales] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -21,6 +20,13 @@ export default function SalesPage() {
   const [meta, setMeta] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [userLocationId, setUserLocationId] = useState(null);
+  
+  // Summary totals state
+  const [summary, setSummary] = useState({
+    totalRevenue: 0,
+    totalTransactions: 0,
+    averageSale: 0
+  });
   
   // Edit states
   const [editingSale, setEditingSale] = useState(null);
@@ -38,7 +44,7 @@ export default function SalesPage() {
   useEffect(() => {
     const timeout = setTimeout(() => {
       setDebouncedSearch(searchQuery);
-      setPage(1); // Reset to first page when search changes
+      setPage(1);
     }, 500);
     return () => clearTimeout(timeout);
   }, [searchQuery]);
@@ -52,7 +58,6 @@ export default function SalesPage() {
     if (user) {
       setIsAdmin(user.role === 'ADMIN');
       setUserLocationId(user.locationId);
-      // For employees, set their location as default filter
       if (user.role !== 'ADMIN' && user.locationId) {
         setFilterLocation(user.locationId);
       }
@@ -61,27 +66,22 @@ export default function SalesPage() {
 
   useEffect(() => {
     fetchData();
+    fetchSummary(); // Fetch totals separately
   }, [page, debouncedSearch, filterLocation]);
-
-  // No client-side filtering - let the backend handle it
-  // filteredSales will be the same as sales since backend already filters
 
   const fetchData = async () => {
     try {
       setLoading(true);
       
-      // Build query parameters
       const params = new URLSearchParams({
         page: page.toString(),
         limit: limit.toString()
       });
       
-      // Add search filter if present
       if (debouncedSearch) {
         params.append('search', debouncedSearch);
       }
       
-      // Determine location filter
       let locationToFilter = filterLocation;
       if (!isAdmin && userLocationId) {
         locationToFilter = userLocationId;
@@ -91,13 +91,10 @@ export default function SalesPage() {
         params.append('locationId', locationToFilter);
       }
 
-      const [salesRes, locationsRes] = await Promise.all([
-        api.get(`/sales?${params.toString()}`),
-        api.get('/locations')
-      ]);
+      const salesRes = await api.get(`/sales?${params.toString()}`);
+      const locationsRes = await api.get('/locations');
 
       setSales(Array.isArray(salesRes.data.data) ? salesRes.data.data : []);
-      setFilteredSales(Array.isArray(salesRes.data.data) ? salesRes.data.data : []);
       setMeta(salesRes.data.meta);
       setLocations(locationsRes.data);
       
@@ -106,6 +103,39 @@ export default function SalesPage() {
       console.error(error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // New function to fetch summary totals based on filters
+  const fetchSummary = async () => {
+    try {
+      const params = new URLSearchParams();
+      
+      if (debouncedSearch) {
+        params.append('search', debouncedSearch);
+      }
+      
+      let locationToFilter = filterLocation;
+      if (!isAdmin && userLocationId) {
+        locationToFilter = userLocationId;
+      }
+      
+      if (locationToFilter) {
+        params.append('locationId', locationToFilter);
+      }
+
+      // Fetch summary totals
+      const summaryRes = await api.get(`/sales/summary?${params.toString()}`);
+      
+      setSummary({
+        totalRevenue: summaryRes.data.totalRevenue || 0,
+        totalTransactions: summaryRes.data.totalTransactions || 0,
+        averageSale: summaryRes.data.averageSale || 0
+      });
+      
+    } catch (error) {
+      console.error('Failed to load summary:', error);
+      // Don't show toast for summary errors to avoid spamming
     }
   };
 
@@ -159,7 +189,7 @@ export default function SalesPage() {
     e.preventDefault();
     
     try {
-      const response = await api.put(`/sales/${editingSale.id}`, {
+      await api.put(`/sales/${editingSale.id}`, {
         ...editForm,
         items: editForm.items.map(({ id, ...item }) => item)
       });
@@ -168,6 +198,7 @@ export default function SalesPage() {
       setIsEditModalOpen(false);
       setEditingSale(null);
       fetchData();
+      fetchSummary(); // Refresh summary after update
     } catch (error) {
       console.error('Update error:', error);
       toast.error(error.response?.data?.error || 'Failed to update sale');
@@ -185,9 +216,7 @@ export default function SalesPage() {
     setPage(1);
   };
 
-  if (loading) return <div className="p-6">Loading sales history...</div>;
-
-  const totalRevenue = filteredSales.reduce((sum, sale) => sum + sale.totalAmount, 0);
+  if (loading && sales.length === 0) return <div className="p-6">Loading sales history...</div>;
 
   return (
     <Sidebar>
@@ -195,21 +224,28 @@ export default function SalesPage() {
       <div className="max-w-7xl mx-auto">
         <h1 className="text-3xl font-bold text-gray-800 mb-6">Sales History</h1>
 
-        {/* Summary Cards */}
+        {/* Summary Cards - Now showing filtered totals */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div className="card bg-green-50 border-l-4 border-green-500">
             <p className="text-sm text-gray-600">Total Revenue</p>
-            <p className="text-2xl font-bold text-green-700">{formatCurrency(totalRevenue)}</p>
+            <p className="text-2xl font-bold text-green-700">{formatCurrency(summary.totalRevenue)}</p>
+            {(debouncedSearch || filterLocation) && (
+              <p className="text-xs text-gray-500 mt-1">Filtered results</p>
+            )}
           </div>
           <div className="card bg-blue-50 border-l-4 border-blue-500">
             <p className="text-sm text-gray-600">Total Transactions</p>
-            <p className="text-2xl font-bold text-blue-700">{filteredSales.length}</p>
+            <p className="text-2xl font-bold text-blue-700">{summary.totalTransactions}</p>
+            {(debouncedSearch || filterLocation) && (
+              <p className="text-xs text-gray-500 mt-1">Filtered results</p>
+            )}
           </div>
           <div className="card bg-purple-50 border-l-4 border-purple-500">
             <p className="text-sm text-gray-600">Average Sale</p>
-            <p className="text-2xl font-bold text-purple-700">
-              {filteredSales.length > 0 ? formatCurrency(totalRevenue / filteredSales.length) : 'KES 0'}
-            </p>
+            <p className="text-2xl font-bold text-purple-700">{formatCurrency(summary.averageSale)}</p>
+            {(debouncedSearch || filterLocation) && (
+              <p className="text-xs text-gray-500 mt-1">Filtered results</p>
+            )}
           </div>
         </div>
 
@@ -227,7 +263,6 @@ export default function SalesPage() {
               />
             </div>
             
-            {/* Only show location filter for admin users */}
             {isAdmin && (
               <div className="w-full md:w-64">
                 <select
@@ -243,7 +278,6 @@ export default function SalesPage() {
               </div>
             )}
             
-            {/* Show current location for non-admin users */}
             {!isAdmin && userLocationId && (
               <div className="w-full md:w-64 px-3 py-2 bg-gray-100 rounded-lg text-sm text-gray-600">
                 <span className="font-medium">Location:</span> {locations.find(l => l.id === userLocationId)?.name || 'My Location'}
@@ -260,29 +294,18 @@ export default function SalesPage() {
             )}
           </div>
           
-          {/* Active filters display */}
           {(searchQuery || filterLocation) && (
             <div className="mt-3 flex flex-wrap gap-2">
               {searchQuery && (
                 <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
                   Search: {searchQuery}
-                  <button
-                    onClick={() => setSearchQuery('')}
-                    className="ml-1 hover:text-blue-600"
-                  >
-                    ×
-                  </button>
+                  <button onClick={() => setSearchQuery('')} className="ml-1 hover:text-blue-600">×</button>
                 </span>
               )}
               {filterLocation && (
                 <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">
                   Location: {locations.find(l => l.id === filterLocation)?.name}
-                  <button
-                    onClick={() => setFilterLocation('')}
-                    className="ml-1 hover:text-green-600"
-                  >
-                    ×
-                  </button>
+                  <button onClick={() => setFilterLocation('')} className="ml-1 hover:text-green-600">×</button>
                 </span>
               )}
             </div>
@@ -307,14 +330,14 @@ export default function SalesPage() {
               </tr>
               </thead>
               <tbody className="divide-y">
-                {filteredSales.length === 0 ? (
+                {sales.length === 0 ? (
                   <tr>
                     <td colSpan="8" className="px-4 py-8 text-center text-gray-500">
                       No sales found matching your filters.
                     </td>
                   </tr>
                 ) : (
-                  filteredSales.map((sale) => (
+                  sales.map((sale) => (
                     <tr key={sale.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 font-mono text-sm text-gray-800">{sale.receiptNumber}</td>
                       <td className="px-4 py-3 text-gray-600">
@@ -361,7 +384,6 @@ export default function SalesPage() {
               </tbody>
             </table>
           
-          {/* Pagination */}
           {meta && meta.total > 0 && (
             <div className="flex justify-between items-center mt-4">
               <button
