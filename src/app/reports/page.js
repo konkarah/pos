@@ -566,8 +566,8 @@ const exportReportExcel = async () => {
                   </div>
                   <div className="card bg-blue-50 border-l-4 border-blue-500">
                     <p className="text-sm text-gray-600">Net Stock Change</p>
-                    <p className={`text-2xl font-bold ${(stockMovementData?.summary?.netStockChange || 0) >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                      {(stockMovementData?.summary?.netStockChange || 0) >= 0 ? '+' : ''}{stockMovementData?.summary?.netStockChange || 0}
+                    <p className={`text-2xl font-bold ${(stockMovementData?.summary?.netChange || 0) >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                      {(stockMovementData?.summary?.netChange || 0) >= 0 ? '+' : ''}{stockMovementData?.summary?.netChange || 0}
                     </p>
                   </div>
                   <div className="card bg-purple-50 border-l-4 border-purple-500">
