@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { ShoppingCart, Package, TrendingUp, DollarSign } from 'lucide-react';
 import toast from 'react-hot-toast';
 import SidebarLayout from '@/components/Sidebar';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -20,7 +20,27 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [userLocationId, setUserLocationId] = useState(null);
-  const [stockGrowthData, setStockGrowthData] = useState([]);
+  const [stockGrowth, setStockGrowth] = useState([]);
+const [stockPeriod, setStockPeriod] = useState('semi-annually');
+const [stockLoading, setStockLoading] = useState(false);
+
+useEffect(() => {
+  if (user) fetchStockGrowth();
+}, [user, stockPeriod]);
+
+const fetchStockGrowth = async () => {
+  setStockLoading(true);
+  try {
+    const params = { period: stockPeriod };
+    if (isAdmin && userLocationId) params.locationId = userLocationId;
+    const res = await api.get('/products/stock-growth', { params });
+    setStockGrowth(res.data.data);
+  } catch (error) {
+    console.error('Failed to load stock growth');
+  } finally {
+    setStockLoading(false);
+  }
+};
 
   useEffect(() => {
     if (user) {
@@ -39,19 +59,6 @@ export default function Dashboard() {
       fetchDashboardData();
     }
   }, [user]);
-
-  // Fetch stock growth data for dashboard
-  useEffect(() => {
-    const fetchStockGrowth = async () => {
-      try {
-        const res = await api.get('/products/stock-growth');
-        setStockGrowthData(res.data.data || []);
-      } catch (error) {
-        toast.error('Failed to load stock growth data');
-      }
-    };
-    fetchStockGrowth();
-  }, []);
 
 const fetchDashboardData = async () => {
   try {
@@ -189,25 +196,6 @@ const fetchDashboardData = async () => {
           })}
         </div>
 
-        {/* Stock Growth Chart */}
-        <div className="mb-8">
-          <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-blue-600" /> Stock Growth (Month-on-Month)
-          </h3>
-          <div className="bg-white rounded-lg shadow-sm p-4">
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={stockGrowthData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis allowDecimals={false} label={{ value: 'Total Stock', angle: -90, position: 'insideLeft' }} />
-                <Tooltip />
-                <Legend />
-                <Line type="monotone" dataKey="totalStock" stroke="#2563eb" strokeWidth={2} activeDot={{ r: 8 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
         {/* Quick Actions */}
         <div className="bg-white rounded-lg shadow-sm p-6">
           <h3 className="text-lg font-semibold text-gray-800 mb-4">Quick Actions</h3>
@@ -226,6 +214,55 @@ const fetchDashboardData = async () => {
           </div>
         </div>
       </div>
+      {/* Stock Growth Chart */}
+<div className="bg-white rounded-lg shadow-sm p-6 mt-6 max-w-7xl justify-center mx-auto">
+  <div className="flex items-center justify-between mb-4">
+    <h3 className="text-lg font-semibold text-gray-800">Stock Value Growth</h3>
+    <select
+      value={stockPeriod}
+      onChange={(e) => setStockPeriod(e.target.value)}
+      className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-600 focus:outline-none focus:ring-2 focus:ring-primary-500"
+    >
+      <option value="monthly">This Month</option>
+      <option value="quarterly">Last 3 Months</option>
+      <option value="semi-annually">Last 6 Months</option>
+      <option value="yearly">Last 12 Months</option>
+    </select>
+  </div>
+
+  
+
+  {stockLoading ? (
+    <div className="h-48 flex items-center justify-center text-gray-400 text-sm">
+      Loading...
+    </div>
+  ) : stockGrowth.length === 0 ? (
+    <div className="h-48 flex items-center justify-center text-gray-400 text-sm">
+      No stock data available
+    </div>
+  ) : (
+    <ResponsiveContainer width="100%" height={220}>
+<LineChart data={stockGrowth} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
+  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+  <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+  <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `KES ${(v/1000).toFixed(0)}k`} />
+  <Tooltip
+    formatter={(value) => [`KES ${value.toLocaleString()}`, 'Stock Value']}
+    labelStyle={{ fontWeight: 600 }}
+  />
+  <Line
+    type="monotone"
+    dataKey="stockValue"
+    stroke="#6366f1"
+    strokeWidth={2}
+    dot={{ r: 4, fill: '#6366f1' }}
+    activeDot={{ r: 6 }}
+    name="Stock Value"
+  />
+</LineChart>
+    </ResponsiveContainer>
+  )}
+</div>
     </SidebarLayout>
   );
 }
