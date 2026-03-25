@@ -31,6 +31,8 @@ export default function InventoryPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [userLocationId, setUserLocationId] = useState(null);
   const [nextSKU, setNextSKU] = useState('');
+  // In your Dashboard or Inventory component
+const [stockFilter, setStockFilter] = useState('all'); // 'all' | 'in-stock' | 'out-of-stock'
 
   useEffect(() => {
     if (user) {
@@ -50,14 +52,14 @@ export default function InventoryPage() {
   // Reset page when search or location changes
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, selectedLocation]);
+  }, [debouncedSearch, selectedLocation, stockFilter]);
 
   // Fetch data when dependencies change
   useEffect(() => {
     if (user) {
       fetchData();
     }
-  }, [debouncedSearch, page, selectedLocation, user]);
+  }, [debouncedSearch, page, selectedLocation, user, stockFilter]);
 
   // Generate next SKU when opening modal
   useEffect(() => {
@@ -121,44 +123,49 @@ export default function InventoryPage() {
     });
   };
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [locationsRes, categoriesRes] = await Promise.all([
-        api.get('/locations'),
-        api.get('/categories')
-      ]);
+const fetchData = async () => {
+  setLoading(true);
+  try {
+    const [locationsRes, categoriesRes] = await Promise.all([
+      api.get('/locations'),
+      api.get('/categories')
+    ]);
 
-      // Build query params
-      const params = new URLSearchParams({
-        page: page.toString(),
-        limit: '10'
-      });
-      
-      if (debouncedSearch) {
-        params.append('search', debouncedSearch);
-      }
-      
-      // Only filter by location if admin AND a location is selected
-      if (isAdmin && selectedLocation) {
-        params.append('locationId', selectedLocation);
-      }
-
-      const productsRes = await api.get(`/products?${params.toString()}`);
-      
-      const data = productsRes.data.data;
-      
-      setProducts(data);
-      setTotalPages(productsRes.data.totalPages);
-      setLocations(locationsRes.data);
-      setCategories(categoriesRes.data);
-    } catch (error) {
-      console.error('Failed to load data:', error);
-      toast.error('Failed to load data');
-    } finally {
-      setLoading(false);
+    // Build query params
+    const params = new URLSearchParams({
+      page: page.toString(),
+      limit: '10'
+    });
+    
+    if (debouncedSearch) {
+      params.append('search', debouncedSearch);
     }
-  };
+    
+    // Only filter by location if admin AND a location is selected
+    if (isAdmin && selectedLocation) {
+      params.append('locationId', selectedLocation);
+    }
+
+    // ✅ NEW: Add stock filter parameter
+    if (stockFilter !== 'all') {
+      params.append('stockStatus', stockFilter);
+    }
+
+    const productsRes = await api.get(`/products?${params.toString()}`);
+    
+    const data = productsRes.data.data;
+    
+    setProducts(data);
+    setTotalPages(productsRes.data.totalPages);
+    setLocations(locationsRes.data);
+    setCategories(categoriesRes.data);
+  } catch (error) {
+    console.error('Failed to load data:', error);
+    toast.error('Failed to load data');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -312,7 +319,27 @@ export default function InventoryPage() {
                     <option key={loc.id} value={loc.id}>{loc.name}</option>
                   ))}
                 </select>
+                
               )}
+              {/* Stock Filter Dropdown */}
+<div className="flex items-center gap-2 mb-4">
+  <label className="text-sm text-gray-600">Stock:</label>
+  <select
+    value={stockFilter}
+    onChange={(e) => setStockFilter(e.target.value)}
+    className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
+  >
+    <option value="all">All Items</option>
+    <option value="in-stock">In Stock</option>
+    <option value="out-of-stock">Out of Stock</option>
+  </select>
+  
+  {stockFilter === 'out-of-stock' && (
+    <span className="text-xs text-red-500 font-medium">
+      🔴 Showing items with zero stock
+    </span>
+  )}
+</div>
               
               {/* Show info for employees */}
               {!isAdmin && (
