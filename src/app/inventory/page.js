@@ -18,7 +18,7 @@ export default function InventoryPage() {
     name: '',
     sku: '',
     buyPrice: '',
-    sellPrice: '',
+    sellPrice: 0,
     categoryId: '',
     variants: [{ locationId: '', stockQuantity: 0 }]
   });
@@ -117,7 +117,7 @@ const [stockFilter, setStockFilter] = useState('all'); // 'all' | 'in-stock' | '
       name: '',
       sku: nextSKU || '',
       buyPrice: '',
-      sellPrice: '',
+      sellPrice: 0,
       categoryId: '',
       variants: [{ locationId: isAdmin ? '' : userLocationId, stockQuantity: 0 }]
     });
@@ -519,14 +519,19 @@ const fetchData = async () => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Sell Price (KES) *</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        required
-                        value={formData.sellPrice}
-                        onChange={(e) => setFormData({...formData, sellPrice: e.target.value})}
-                        className="input-field"
-                      />
+                    <input
+                      type="number"
+                      step="0.01"
+                      required
+                      value={formData.sellPrice ?? 0}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          sellPrice: e.target.value === '' ? 0 : Number(e.target.value)
+                        })
+                      }
+                      className="input-field"
+                    />
                     </div>
                   </div>
 
