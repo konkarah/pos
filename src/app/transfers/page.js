@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
@@ -21,60 +21,116 @@ export default function TransfersPage() {
     productVariantId: '',
     quantity: 1
   });
+  // Add these state variables
+const [productSearchTerm, setProductSearchTerm] = useState('');
+const [showDropdown, setShowDropdown] = useState(false);
+const dropdownRef = useRef(null);
+
+// Filter variants based on search term
+const getFilteredVariants = () => {
+  const allVariants = getAvailableVariants();
+  
+  if (!productSearchTerm) return allVariants;
+  
+  return allVariants.filter(variant => 
+    variant.label.toLowerCase().includes(productSearchTerm.toLowerCase()) ||
+    variant.productName.toLowerCase().includes(productSearchTerm.toLowerCase())
+  );
+};
+
+// Close dropdown when clicking outside
+useEffect(() => {
+  const handleClickOutside = (event) => {
+    if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+      setShowDropdown(false);
+    }
+  };
+  
+  document.addEventListener('mousedown', handleClickOutside);
+  return () => document.removeEventListener('mousedown', handleClickOutside);
+}, []);
 
   useEffect(() => {
     fetchData();
   }, []);
 
-  const fetchData = async () => {
-    try {
-      const [transfersRes, productsRes, locationsRes] = await Promise.all([
-        api.get('/transfers'),
-        api.get('/products'),
-        api.get('/locations')
-      ]);
-      setTransfers(transfersRes.data);
-      setProducts(productsRes.data);
-      setLocations(locationsRes.data);
-      
-      // Set default locations if available
-      if (locationsRes.data.length >= 2) {
-        setFormData(prev => ({
-          ...prev,
-          fromLocationId: locationsRes.data[0].id,
-          toLocationId: locationsRes.data[1].id
-        }));
-      }
-    } catch (error) {
-      toast.error('Failed to load transfer data');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+const fetchData = async () => {
+  try {
+    const [transfersRes, productsRes, locationsRes] = await Promise.all([
+      api.get('/transfers'),
+      api.get('/products?limit=1000'), // Get all products without pagination
+      api.get('/locations')
+    ]);
     
-    if (formData.fromLocationId === formData.toLocationId) {
-      toast.error('Source and destination locations must be different');
-      return;
+    // Debug logging
+    console.log('Products response structure:', productsRes.data);
+    
+    // Extract the products array correctly - it might be in data.data or directly in data
+    let productsData = [];
+    if (Array.isArray(productsRes.data)) {
+      // If response is directly an array
+      productsData = productsRes.data;
+    } else if (productsRes.data && Array.isArray(productsRes.data.data)) {
+      // If response has a data property containing the array (like your API returns)
+      productsData = productsRes.data.data;
+    } else if (productsRes.data && Array.isArray(productsRes.data.products)) {
+      // Alternative structure
+      productsData = productsRes.data.products;
+    } else {
+      console.error('Unexpected products response structure:', productsRes.data);
+      productsData = [];
     }
+    
+    console.log('Products data extracted:', productsData);
+    
+    setTransfers(Array.isArray(transfersRes.data) ? transfersRes.data : []);
+    setProducts(productsData);
+    setLocations(Array.isArray(locationsRes.data) ? locationsRes.data : []);
+    
+    // Set default locations if available
+    if (Array.isArray(locationsRes.data) && locationsRes.data.length >= 2) {
+      setFormData(prev => ({
+        ...prev,
+        fromLocationId: locationsRes.data[0].id,
+        toLocationId: locationsRes.data[1].id
+      }));
+    }
+  } catch (error) {
+    console.error('Error fetching data:', error);
+    toast.error('Failed to load transfer data');
+    setTransfers([]);
+    setProducts([]);
+    setLocations([]);
+  } finally {
+    setLoading(false);
+  }
+};
 
-    try {
-      await api.post('/transfers', formData);
-      toast.success('Transfer request created successfully');
-      setShowModal(false);
-      setFormData({
-        fromLocationId: locations[0]?.id || '',
-        toLocationId: locations[1]?.id || '',
-        productVariantId: '',
-        quantity: 1
-      });
-      fetchData();
-    } catch (error) {
-      toast.error(error.response?.data?.error || 'Failed to create transfer');
-    }
-  };
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  
+  if (formData.fromLocationId === formData.toLocationId) {
+    toast.error('Source and destination locations must be different');
+    return;
+  }
+
+  try {
+    await api.post('/transfers', formData);
+    toast.success('Transfer request created successfully');
+    setShowModal(false);
+    
+    // Fix: Only set default locations if locations array exists and has items
+    setFormData({
+      fromLocationId: locations && locations.length > 0 ? locations[0].id : '',
+      toLocationId: locations && locations.length > 1 ? locations[1].id : '',
+      productVariantId: '',
+      quantity: 1
+    });
+    fetchData();
+  } catch (error) {
+    toast.error(error.response?.data?.error || 'Failed to create transfer');
+  }
+};
 
   const handleComplete = async (id) => {
     if (!confirm('Confirm completion of this transfer? Stock will be updated.')) return;
@@ -111,19 +167,40 @@ export default function TransfersPage() {
   };
 
   // Filter products to only show those with variants for the dropdown
-  const getAvailableVariants = () => {
-    const variants = [];
-    products.forEach(product => {
-      product.variants.forEach(variant => {
-        variants.push({
-          id: variant.id,
-          label: `${product.name} (${variant.location.name}) - Stock: ${variant.stockQuantity}`,
-          locationId: variant.locationId
-        });
-      });
-    });
+// Update your getAvailableVariants function with proper safety checks
+const getAvailableVariants = () => {
+  const variants = [];
+  
+  // Add safety check
+  if (!Array.isArray(products)) {
+    console.error('Products is not an array:', products);
     return variants;
-  };
+  }
+  
+  products.forEach(product => {
+    // Check if product has variants and it's an array
+    if (product && Array.isArray(product.variants)) {
+      product.variants.forEach(variant => {
+        // Ensure variant and location exist
+        if (variant && variant.id) {
+          const locationName = variant.location?.name || 'Unknown Location';
+          const stockQty = variant.stockQuantity || 0;
+          
+          variants.push({
+            id: variant.id,
+            label: `${product.name || 'Unknown Product'} (${locationName}) - Stock: ${stockQty}`,
+            locationId: variant.locationId,
+            productId: product.id,
+            productName: product.name,
+            stockQuantity: stockQty
+          });
+        }
+      });
+    }
+  });
+  
+  return variants;
+};
 
   if (loading) return <div className="p-6">Loading transfers...</div>;
 
@@ -158,56 +235,60 @@ export default function TransfersPage() {
                 )}
               </tr>
             </thead>
-            <tbody className="divide-y">
-              {transfers.length === 0 ? (
-                <tr>
-                  <td colSpan="8" className="px-4 py-8 text-center text-gray-500">
-                    No stock transfers recorded yet.
-                  </td>
-                </tr>
-              ) : (
-                transfers.map((transfer) => (
-                  <tr key={transfer.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-gray-600">
-                      {new Date(transfer.createdAt).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-3 font-medium text-gray-800">
-                      {transfer.productVariant.product.name}
-                      {transfer.productVariant.variantValue && (
-                        <span className="block text-xs text-gray-500">
-                          {transfer.productVariant.variantValue}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">{transfer.fromLocation.name}</td>
-                    <td className="px-4 py-3 text-gray-600 flex items-center gap-2">
-                      <ArrowRight className="w-4 h-4 text-gray-400" />
-                      {transfer.toLocation.name}
-                    </td>
-                    <td className="px-4 py-3 font-bold text-gray-800">{transfer.quantity}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        {getStatusIcon(transfer.status)}
-                        {getStatusBadge(transfer.status)}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">{transfer.transferredBy.username}</td>
-                    {user.role === 'ADMIN' && (
-                      <td className="px-4 py-3">
-                        {transfer.status === 'PENDING' && (
-                          <button
-                            onClick={() => handleComplete(transfer.id)}
-                            className="text-green-600 hover:text-green-800 text-sm font-medium"
-                          >
-                            Complete
-                          </button>
-                        )}
-                      </td>
-                    )}
-                  </tr>
-                ))
-              )}
-            </tbody>
+<tbody className="divide-y">
+  {!Array.isArray(transfers) || transfers.length === 0 ? (
+    <tr>
+      <td colSpan="8" className="px-4 py-8 text-center text-gray-500">
+        No stock transfers recorded yet.
+      </td>
+    </tr>
+  ) : (
+    transfers.map((transfer) => (
+      <tr key={transfer.id} className="hover:bg-gray-50">
+        <td className="px-4 py-3 text-gray-600">
+          {new Date(transfer.createdAt).toLocaleDateString()}
+        </td>
+        <td className="px-4 py-3 font-medium text-gray-800">
+          {transfer.productVariant?.product?.name || 'Unknown Product'}
+          {transfer.productVariant?.variantValue && (
+            <span className="block text-xs text-gray-500">
+              {transfer.productVariant.variantValue}
+            </span>
+          )}
+        </td>
+        <td className="px-4 py-3 text-gray-600">
+          {transfer.fromLocation?.name || 'Unknown Location'}
+        </td>
+        <td className="px-4 py-3 text-gray-600 flex items-center gap-2">
+          <ArrowRight className="w-4 h-4 text-gray-400" />
+          {transfer.toLocation?.name || 'Unknown Location'}
+        </td>
+        <td className="px-4 py-3 font-bold text-gray-800">{transfer.quantity}</td>
+        <td className="px-4 py-3">
+          <div className="flex items-center gap-2">
+            {getStatusIcon(transfer.status)}
+            {getStatusBadge(transfer.status)}
+          </div>
+        </td>
+        <td className="px-4 py-3 text-gray-600">
+          {transfer.transferredBy?.username || 'Unknown'}
+        </td>
+        {user.role === 'ADMIN' && (
+          <td className="px-4 py-3">
+            {transfer.status === 'PENDING' && (
+              <button
+                onClick={() => handleComplete(transfer.id)}
+                className="text-green-600 hover:text-green-800 text-sm font-medium"
+              >
+                Complete
+              </button>
+            )}
+          </td>
+        )}
+      </tr>
+    ))
+  )}
+</tbody>
           </table>
         </div>
 
@@ -220,24 +301,78 @@ export default function TransfersPage() {
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Product & Source Location *</label>
-                  <select
-                    required
-                    value={formData.productVariantId}
-                    onChange={(e) => {
-                      const variant = getAvailableVariants().find(v => v.id === e.target.value);
-                      setFormData({
-                        ...formData,
-                        productVariantId: e.target.value,
-                        fromLocationId: variant ? variant.locationId : ''
-                      });
-                    }}
-                    className="input-field"
-                  >
-                    <option value="">Select Product at Source Location</option>
-                    {getAvailableVariants().map(v => (
-                      <option key={v.id} value={v.id}>{v.label}</option>
-                    ))}
-                  </select>
+<div className="relative" ref={dropdownRef}>
+  
+  {/* Search Input */}
+  <div 
+    className="input-field cursor-pointer flex justify-between items-center"
+    onClick={() => setShowDropdown(!showDropdown)}
+  >
+    <span className={formData.productVariantId ? 'text-gray-900' : 'text-gray-400'}>
+      {formData.productVariantId 
+        ? getAvailableVariants().find(v => v.id === formData.productVariantId)?.label 
+        : 'Select Product at Source Location'}
+    </span>
+    <svg 
+      className={`w-5 h-5 text-gray-400 transition-transform ${showDropdown ? 'rotate-180' : ''}`}
+      fill="none" 
+      stroke="currentColor" 
+      viewBox="0 0 24 24"
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+    </svg>
+  </div>
+  
+  {/* Dropdown */}
+  {showDropdown && (
+    <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-80 overflow-hidden">
+      {/* Search Input */}
+      <div className="p-2 border-b">
+        <input
+          type="text"
+          placeholder="Search products..."
+          value={productSearchTerm}
+          onChange={(e) => setProductSearchTerm(e.target.value)}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          autoFocus
+        />
+      </div>
+      
+      {/* Options List */}
+      <div className="overflow-y-auto max-h-64">
+        {getFilteredVariants().length === 0 ? (
+          <div className="px-4 py-3 text-gray-500 text-center">
+            No products found
+          </div>
+        ) : (
+          getFilteredVariants().map(variant => (
+            <div
+              key={variant.id}
+              className="px-4 py-2 hover:bg-gray-50 cursor-pointer border-b last:border-b-0"
+              onClick={() => {
+                setFormData({
+                  ...formData,
+                  productVariantId: variant.id,
+                  fromLocationId: variant.locationId
+                });
+                setShowDropdown(false);
+                setProductSearchTerm('');
+              }}
+            >
+              <div className="font-medium">{variant.productName}</div>
+              <div className="text-sm text-gray-500">
+                Location: {variant.label.split('(')[1]?.split(')')[0] || 'Unknown'}
+              </div>
+              <div className="text-xs text-gray-400">
+                Stock: {variant.stockQuantity} units
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  )}
+</div>
                   <p className="text-xs text-gray-500 mt-1">
                     Selecting a product automatically sets the "From" location.
                   </p>
