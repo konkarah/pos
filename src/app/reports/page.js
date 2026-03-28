@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
-import { BarChart, Bar, XAxis,Cell, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, AreaChart, Area } from 'recharts';
-import { Download, Calendar, TrendingUp, TrendingDown, Package } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, AreaChart, Area } from 'recharts';
+import { Download, Calendar, TrendingUp, TrendingDown, Package, Zap, Snail } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 import { useAuth } from '@/context/AuthContext';
 
@@ -16,6 +16,7 @@ export default function ReportsPage() {
   const [reportData, setReportData] = useState(null);
   const [filteredReportData, setFilteredReportData] = useState(null);
   const [stockMovementData, setStockMovementData] = useState(null);
+  const [productVelocityData, setProductVelocityData] = useState(null);
   const [locations, setLocations] = useState([]);
   const [selectedLocation, setSelectedLocation] = useState('');
   const [initialized, setInitialized] = useState(false);
@@ -24,6 +25,10 @@ export default function ReportsPage() {
   const [customEndDate, setCustomEndDate] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
   const [userLocationId, setUserLocationId] = useState(null);
+  const [velocityThreshold, setVelocityThreshold] = useState({
+    fast: 2,
+    slow: 0.5
+  });
 
   useEffect(() => {
     if (user) {
@@ -118,8 +123,8 @@ export default function ReportsPage() {
       );
       
       const filteredSales = filtered.salesByLocation;
-filtered.summary = {
-  ...(filtered.summary || {}),
+      filtered.summary = {
+        ...(filtered.summary || {}),
         totalRevenue: filteredSales.reduce((sum, item) => sum + item.totalRevenue, 0),
         totalTransactions: filteredSales.reduce((sum, item) => sum + item.transactionCount, 0),
         averageTransactionValue: filteredSales.reduce((sum, item) => sum + item.totalRevenue, 0) / 
@@ -157,119 +162,127 @@ filtered.summary = {
       filtered.expensesByCategory = Array.from(categoryMap.values());
     }
 
-    setFilteredReportData(filtered);
-  };
-
-const fetchReport = async () => {
-  setLoading(true);
-  setReportData(null);
-  setFilteredReportData(null);
-
-  try {
-    const params = {};
-
-    if (useCustomRange && customStartDate && customEndDate) {
-      params.startDate = customStartDate;
-      params.endDate = customEndDate;
-    } else {
-      params.period = period;
-    }
-
-    if (selectedLocation && isAdmin) {
-      params.locationId = selectedLocation;
-    }
-
-    // -----------------------------
-    // PROFIT TAB → CALL MULTIPLE APIs
-    // -----------------------------
-    if (activeTab === 'profit') {
-      const [stockRes, profitRes] = await Promise.all([
-        api.get('/reports/stock-movement', { params }),
-        api.get('/reports/profit', { params })
-      ]);
-
-      // keep existing behavior
-      setStockMovementData(stockRes.data);
-
-      // 👇 merge both responses into ONE object
-      setReportData({
-        ...stockRes.data,
-        ...profitRes.data,
-        // optional: keep them grouped too
-        stockMovement: stockRes.data,
-        profit: profitRes.data
-      });
-
+    // For product velocity tab, we need to filter by location at the API level
+    if (activeTab === 'velocity' && productVelocityData) {
+      // Location filtering is handled in the API call
+      setFilteredReportData(productVelocityData);
       return;
     }
 
-    // -----------------------------
-    // OTHER TABS (unchanged)
-    // -----------------------------
-    let endpoint = '';
-    if (activeTab === 'sales') endpoint = '/reports/sales';
-    else if (activeTab === 'expenses') endpoint = '/reports/expenses';
+    setFilteredReportData(filtered);
+  };
 
-    const res = await api.get(endpoint, { params });
-    setReportData(res.data);
+  const fetchReport = async () => {
+    setLoading(true);
+    setReportData(null);
+    setFilteredReportData(null);
 
-  } catch (error) {
-    toast.error('Failed to load report data');
-    console.error(error);
-  } finally {
-    setLoading(false);
-  }
-};
+    try {
+      const params = {};
 
-const exportReportExcel = async () => {
-  try {
-    toast.loading('Generating Excel file...', { id: 'export' });
-    
-    const params = {};
-    if (useCustomRange && customStartDate && customEndDate) {
-      params.startDate = customStartDate;
-      params.endDate = customEndDate;
-    } else {
-      params.period = period;
+      if (useCustomRange && customStartDate && customEndDate) {
+        params.startDate = customStartDate;
+        params.endDate = customEndDate;
+      } else {
+        params.period = period;
+      }
+
+      if (selectedLocation && isAdmin) {
+        params.locationId = selectedLocation;
+      }
+
+      // Product Velocity Tab
+      if (activeTab === 'velocity') {
+        const velocityRes = await api.get('/products/product-velocity', { params });
+        setProductVelocityData(velocityRes.data);
+        setReportData(velocityRes.data);
+        return;
+      }
+
+      // Profit Tab
+      if (activeTab === 'profit') {
+        const [stockRes, profitRes] = await Promise.all([
+          api.get('/reports/stock-movement', { params }),
+          api.get('/reports/profit', { params })
+        ]);
+
+        setStockMovementData(stockRes.data);
+        setReportData({
+          ...stockRes.data,
+          ...profitRes.data,
+          stockMovement: stockRes.data,
+          profit: profitRes.data
+        });
+        return;
+      }
+
+      // Other Tabs
+      let endpoint = '';
+      if (activeTab === 'sales') endpoint = '/reports/sales';
+      else if (activeTab === 'expenses') endpoint = '/reports/expenses';
+
+      const res = await api.get(endpoint, { params });
+      setReportData(res.data);
+
+    } catch (error) {
+      toast.error('Failed to load report data');
+      console.error(error);
+    } finally {
+      setLoading(false);
     }
-    if (selectedLocation && isAdmin) {
-      params.locationId = selectedLocation;
+  };
+
+  const exportReportExcel = async () => {
+    try {
+      toast.loading('Generating Excel file...', { id: 'export' });
+      
+      const params = {};
+      if (useCustomRange && customStartDate && customEndDate) {
+        params.startDate = customStartDate;
+        params.endDate = customEndDate;
+      } else {
+        params.period = period;
+      }
+      if (selectedLocation && isAdmin) {
+        params.locationId = selectedLocation;
+      }
+
+      const response = await api.get(`/reports/export/${activeTab}`, { 
+        params,
+        responseType: 'blob'
+      });
+
+      if (!response.data || response.data.size === 0) {
+        throw new Error('Empty response from server');
+      }
+
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      
+      const dateStr = new Date().toISOString().split('T')[0];
+      const locationSuffix = selectedLocation ? `-${selectedLocation}` : '';
+      link.setAttribute('download', `${activeTab}-report${locationSuffix}-${dateStr}.xlsx`);
+      
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('Excel file downloaded!', { id: 'export' });
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('Failed to export: ' + (error.message || 'Check filters and try again'), { 
+        id: 'export',
+        duration: 5000 
+      });
     }
-
-    const response = await api.get(`/reports/export/${activeTab}`, { 
-      params,
-      responseType: 'blob'
-    });
-
-    // Check if response has valid data
-    if (!response.data || response.data.size === 0) {
-      throw new Error('Empty response from server');
-    }
-
-    const url = window.URL.createObjectURL(new Blob([response.data]));
-    const link = document.createElement('a');
-    link.href = url;
-    
-    const dateStr = new Date().toISOString().split('T')[0];
-    const locationSuffix = selectedLocation ? `-${selectedLocation}` : '';
-    link.setAttribute('download', `${activeTab}-report${locationSuffix}-${dateStr}.xlsx`);
-    
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
-    
-    toast.success('Excel file downloaded!', { id: 'export' });
-  } catch (error) {
-    console.error('Export error:', error);
-    toast.error('Failed to export: ' + (error.message || 'Check filters and try again'), { 
-      id: 'export',
-      duration: 5000 
-    });
-  }
-};
+  };
 
   const getCurrentDisplayData = () => {
+    if (activeTab === 'velocity') {
+      return productVelocityData;
+    }
     return filteredReportData || reportData;
   };
 
@@ -281,16 +294,16 @@ const exportReportExcel = async () => {
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold text-gray-800">Reports & Analytics</h1>
-          {isAdmin && (
-  <button 
-    className="btn-secondary flex items-center gap-2" 
-    onClick={exportReportExcel}
-    disabled={loading || !reportData}
-  >
-    <Download className="w-4 h-4" /> 
-    {loading ? 'Generating...' : 'Export Excel'}
-  </button>
-)}
+          {isAdmin && activeTab !== 'velocity' && (
+            <button 
+              className="btn-secondary flex items-center gap-2" 
+              onClick={exportReportExcel}
+              disabled={loading || !reportData}
+            >
+              <Download className="w-4 h-4" /> 
+              {loading ? 'Generating...' : 'Export Excel'}
+            </button>
+          )}
         </div>
 
         {/* Controls */}
@@ -314,15 +327,24 @@ const exportReportExcel = async () => {
               Expenses Report
             </button>
             {isAdmin && (
-  <button
-    onClick={() => setActiveTab('profit')}
-    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-      activeTab === 'profit' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-    }`}
-  >
-    Profit & Loss
-  </button>
-)}
+              <button
+                onClick={() => setActiveTab('profit')}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  activeTab === 'profit' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                Profit & Loss
+              </button>
+            )}
+            <button
+              onClick={() => setActiveTab('velocity')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+                activeTab === 'velocity' ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              <Zap className="w-4 h-4" />
+              Product Velocity
+            </button>
           </div>
 
           {/* Date Range & Filters */}
@@ -431,14 +453,13 @@ const exportReportExcel = async () => {
               </div>
             )}
 
-            {/* Location Filter - Always show, but restrict based on user role */}
+            {/* Location Filter */}
             <select
               value={selectedLocation}
               onChange={(e) => setSelectedLocation(e.target.value)}
               className="input-field w-48"
-              disabled={!isAdmin && userLocationId} // Disable for non-admin users with assigned location
+              disabled={!isAdmin && userLocationId}
             >
-              {/* For non-admin users, only show their location */}
               {!isAdmin && userLocationId ? (
                 <>
                   <option value={userLocationId}>
@@ -455,14 +476,37 @@ const exportReportExcel = async () => {
               )}
             </select>
 
-            {/* Show info text for non-admin users */}
-            {!isAdmin && userLocationId && (
-              <div className="text-xs text-gray-500">
-                You can only view data for your assigned location
+            {/* Velocity Threshold Settings (only for velocity tab) */}
+            {activeTab === 'velocity' && (
+              <div className="flex items-center gap-4 ml-auto">
+                <div className="flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-yellow-500" />
+                  <input
+                    type="number"
+                    value={velocityThreshold.fast}
+                    onChange={(e) => setVelocityThreshold({ ...velocityThreshold, fast: parseFloat(e.target.value) })}
+                    className="w-16 px-2 py-1 border rounded text-sm"
+                    step="0.5"
+                    min="0"
+                  />
+                  <span className="text-xs text-gray-500">Fast threshold (units/day)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Snail className="w-4 h-4 text-blue-500" />
+                  <input
+                    type="number"
+                    value={velocityThreshold.slow}
+                    onChange={(e) => setVelocityThreshold({ ...velocityThreshold, slow: parseFloat(e.target.value) })}
+                    className="w-16 px-2 py-1 border rounded text-sm"
+                    step="0.5"
+                    min="0"
+                  />
+                  <span className="text-xs text-gray-500">Slow threshold (units/day)</span>
+                </div>
               </div>
             )}
 
-            {/* Apply Button (for custom range) */}
+            {/* Apply Button */}
             {useCustomRange && (
               <button
                 onClick={fetchReport}
@@ -537,76 +581,96 @@ const exportReportExcel = async () => {
               )}
 
               {activeTab === 'profit' && currentData && (
-  <>
-    <div className="card bg-blue-50 border-l-4 border-blue-500">
-      <p className="text-sm text-gray-600">Total Revenue</p>
-      <p className="text-2xl font-bold text-blue-700">{formatCurrency(currentData.summary?.totalRevenue ?? currentData.revenue)}</p>
-    </div>
-    <div className="card bg-orange-50 border-l-4 border-orange-500">
-      <p className="text-sm text-gray-600">COGS</p>
-      <p className="text-2xl font-bold text-orange-700">{formatCurrency(currentData.summary?.cogs ?? currentData.cogs)}</p>
-    </div>
-    <div className="card bg-red-50 border-l-4 border-red-500">
-      <p className="text-sm text-gray-600">Operating Expenses</p>
-      <p className="text-2xl font-bold text-red-700">{formatCurrency(currentData.summary?.operatingExpenses ?? currentData.operatingExpenses)}</p>
-    </div>
-    <div className={`card border-l-4 ${(currentData.summary?.netProfit ?? currentData.netProfit) >= 0 ? 'bg-emerald-50 border-emerald-500' : 'bg-red-50 border-red-500'}`}>
-      <p className="text-sm text-gray-600">Net Profit</p>
-      <p className={`text-2xl font-bold ${(currentData.summary?.netProfit ?? currentData.netProfit) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
-        {formatCurrency(currentData.summary?.netProfit ?? currentData.netProfit)}
-      </p>
-    </div>
-                  <div className="card bg-red-50 border-l-4 border-red-500">
-                    <p className="text-sm text-gray-600">Total Stock Out</p>
-                    <p className="text-2xl font-bold text-red-700">{stockMovementData?.summary?.totalStockOut || 0}</p>
-                  </div>
-                  <div className="card bg-green-50 border-l-4 border-green-500">
-                    <p className="text-sm text-gray-600">Total Stock In</p>
-                    <p className="text-2xl font-bold text-green-700">{stockMovementData?.summary?.totalStockIn || 0}</p>
-                  </div>
+                <>
                   <div className="card bg-blue-50 border-l-4 border-blue-500">
-                    <p className="text-sm text-gray-600">Net Stock Change</p>
-                    <p className={`text-2xl font-bold ${(stockMovementData?.summary?.netChange || 0) >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                      {(stockMovementData?.summary?.netChange || 0) >= 0 ? '+' : ''}{stockMovementData?.summary?.netChange || 0}
+                    <p className="text-sm text-gray-600">Total Revenue</p>
+                    <p className="text-2xl font-bold text-blue-700">{formatCurrency(currentData.summary?.totalRevenue ?? currentData.revenue)}</p>
+                  </div>
+                  <div className="card bg-orange-50 border-l-4 border-orange-500">
+                    <p className="text-sm text-gray-600">COGS</p>
+                    <p className="text-2xl font-bold text-orange-700">{formatCurrency(currentData.summary?.cogs ?? currentData.cogs)}</p>
+                  </div>
+                  <div className="card bg-red-50 border-l-4 border-red-500">
+                    <p className="text-sm text-gray-600">Operating Expenses</p>
+                    <p className="text-2xl font-bold text-red-700">{formatCurrency(currentData.summary?.operatingExpenses ?? currentData.operatingExpenses)}</p>
+                  </div>
+                  <div className={`card border-l-4 ${(currentData.summary?.netProfit ?? currentData.netProfit) >= 0 ? 'bg-emerald-50 border-emerald-500' : 'bg-red-50 border-red-500'}`}>
+                    <p className="text-sm text-gray-600">Net Profit</p>
+                    <p className={`text-2xl font-bold ${(currentData.summary?.netProfit ?? currentData.netProfit) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                      {formatCurrency(currentData.summary?.netProfit ?? currentData.netProfit)}
                     </p>
                   </div>
-                  <div className="card bg-purple-50 border-l-4 border-purple-500">
-                    <p className="text-sm text-gray-600">Days Tracked</p>
-                    <p className="text-2xl font-bold text-purple-700">{stockMovementData?.data?.length || 0}</p>
+                </>
+              )}
+
+              {activeTab === 'velocity' && currentData.summary && (
+                <>
+                  <div className="card bg-gradient-to-r from-yellow-50 to-orange-50 border-l-4 border-yellow-500">
+                    <div className="flex items-center gap-2">
+                      <Zap className="w-5 h-5 text-yellow-600" />
+                      <p className="text-sm text-gray-600">Fast Moving Products</p>
+                    </div>
+                    <p className="text-2xl font-bold text-yellow-700">{currentData.summary.categories?.FAST?.count || 0}</p>
+                    <p className="text-xs text-gray-500 mt-1">Revenue: {formatCurrency(currentData.summary.categories?.FAST?.revenue || 0)}</p>
+                  </div>
+                  <div className="card bg-gradient-to-r from-blue-50 to-cyan-50 border-l-4 border-blue-500">
+                    <div className="flex items-center gap-2">
+                      <TrendingUp className="w-5 h-5 text-blue-600" />
+                      <p className="text-sm text-gray-600">Moderate Moving</p>
+                    </div>
+                    <p className="text-2xl font-bold text-blue-700">{currentData.summary.categories?.MODERATE?.count || 0}</p>
+                    <p className="text-xs text-gray-500 mt-1">Revenue: {formatCurrency(currentData.summary.categories?.MODERATE?.revenue || 0)}</p>
+                  </div>
+                  <div className="card bg-gradient-to-r from-gray-50 to-slate-50 border-l-4 border-gray-500">
+                    <div className="flex items-center gap-2">
+                      <Snail className="w-5 h-5 text-gray-600" />
+                      <p className="text-sm text-gray-600">Slow Moving Products</p>
+                    </div>
+                    <p className="text-2xl font-bold text-gray-700">{currentData.summary.categories?.SLOW?.count || 0}</p>
+                    <p className="text-xs text-gray-500 mt-1">Revenue: {formatCurrency(currentData.summary.categories?.SLOW?.revenue || 0)}</p>
+                  </div>
+                  <div className="card bg-gradient-to-r from-red-50 to-pink-50 border-l-4 border-red-500">
+                    <div className="flex items-center gap-2">
+                      <TrendingDown className="w-5 h-5 text-red-600" />
+                      <p className="text-sm text-gray-600">Non-Moving Products</p>
+                    </div>
+                    <p className="text-2xl font-bold text-red-700">{currentData.summary.categories?.NON_MOVING?.count || 0}</p>
+                    <p className="text-xs text-gray-500 mt-1">Stock Value: {formatCurrency(currentData.summary.categories?.NON_MOVING?.stockValue || 0)}</p>
                   </div>
                 </>
-)}
+              )}
             </div>
 
             {/* Charts & Details */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               
               {/* Chart Section */}
-<div className="card">
-  <h3 className="text-lg font-semibold mb-4">
-    {activeTab === 'sales' && 'Sales by Location'}
-    {activeTab === 'expenses' && 'Expenses by Category'}
-    {activeTab === 'profit' && 'Financial Overview'}
-  </h3>
-  <div className="h-64">
-    <ResponsiveContainer width="100%" height="100%">
-      {activeTab === 'sales' && currentData.salesByLocation ? (
-        <BarChart data={currentData.salesByLocation}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="locationName" />
-          <YAxis />
-          <Tooltip formatter={(value) => formatCurrency(value)} />
-          <Bar dataKey="totalRevenue" fill="#0ea5e9" name="Revenue" />
-        </BarChart>
-      ) : activeTab === 'expenses' && currentData.expensesByCategory ? (
-        <BarChart data={currentData.expensesByCategory}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="category" tickFormatter={(cat) => cat.replace(/_/g, ' ')} />
-          <YAxis />
-          <Tooltip formatter={(value) => formatCurrency(value)} />
-          <Bar dataKey="totalAmount" fill="#ef4444" name="Amount" />
-        </BarChart>
-      ) : activeTab === 'profit' && stockMovementData?.data ? (
+              <div className="card">
+                <h3 className="text-lg font-semibold mb-4">
+                  {activeTab === 'sales' && 'Sales by Location'}
+                  {activeTab === 'expenses' && 'Expenses by Category'}
+                  {activeTab === 'profit' && 'Financial Overview'}
+                  {activeTab === 'velocity' && 'Product Velocity Distribution'}
+                </h3>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    {activeTab === 'sales' && currentData.salesByLocation ? (
+                      <BarChart data={currentData.salesByLocation}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="locationName" />
+                        <YAxis />
+                        <Tooltip formatter={(value) => formatCurrency(value)} />
+                        <Bar dataKey="totalRevenue" fill="#0ea5e9" name="Revenue" />
+                      </BarChart>
+                    ) : activeTab === 'expenses' && currentData.expensesByCategory ? (
+                      <BarChart data={currentData.expensesByCategory}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="category" tickFormatter={(cat) => cat.replace(/_/g, ' ')} />
+                        <YAxis />
+                        <Tooltip formatter={(value) => formatCurrency(value)} />
+                        <Bar dataKey="totalAmount" fill="#ef4444" name="Amount" />
+                      </BarChart>
+                    ) : activeTab === 'profit' && stockMovementData?.data ? (
                       <AreaChart data={stockMovementData.data}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="date" />
@@ -617,12 +681,27 @@ const exportReportExcel = async () => {
                         <Area type="monotone" dataKey="stockIn" stackId="1" stroke="#10b981" fill="#10b981" fillOpacity={0.3} name="Stock In" />
                         <Line type="monotone" dataKey="cumulativeStock" stroke="#3b82f6" strokeWidth={2} name="Cumulative Stock" dot={false} />
                       </AreaChart>
-                    )  : (
-        <div className="flex items-center justify-center h-full text-gray-400">No chart data available</div>
-      )}
-    </ResponsiveContainer>
-  </div>
-</div>
+                    ) : activeTab === 'velocity' && currentData.groupedProducts ? (
+                      <BarChart data={Object.entries(currentData.summary?.categories || {}).map(([key, value]) => ({
+                        category: key,
+                        count: value.count,
+                        revenue: value.revenue
+                      }))}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="category" />
+                        <YAxis yAxisId="left" />
+                        <YAxis yAxisId="right" orientation="right" />
+                        <Tooltip formatter={(value, name) => name === 'revenue' ? formatCurrency(value) : value} />
+                        <Legend />
+                        <Bar yAxisId="left" dataKey="count" fill="#8884d8" name="Number of Products" />
+                        <Bar yAxisId="right" dataKey="revenue" fill="#82ca9d" name="Revenue" />
+                      </BarChart>
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-gray-400">No chart data available</div>
+                    )}
+                  </ResponsiveContainer>
+                </div>
+              </div>
 
               {/* List Section */}
               <div className="card">
@@ -630,6 +709,7 @@ const exportReportExcel = async () => {
                   {activeTab === 'sales' && 'Top Selling Products'}
                   {activeTab === 'expenses' && 'Recent Expense Entries'}
                   {activeTab === 'profit' && 'Summary Breakdown'}
+                  {activeTab === 'velocity' && 'Fast & Slow Moving Products'}
                 </h3>
                 
                 {/* SALES TAB: Top Products */}
@@ -642,7 +722,7 @@ const exportReportExcel = async () => {
                             <th className="pb-2">Product</th>
                             <th className="pb-2 text-right">Qty</th>
                             <th className="pb-2 text-right">Revenue</th>
-                          </tr>
+                           </tr>
                         </thead>
                         <tbody>
                           {currentData.topProducts.map((item, idx) => (
@@ -650,10 +730,10 @@ const exportReportExcel = async () => {
                               <td className="py-2">{item.product?.name || 'Unknown Product'}</td>
                               <td className="py-2 text-right">{item.quantity || 0}</td>
                               <td className="py-2 text-right font-medium">{formatCurrency(item.revenue)}</td>
-                            </tr>
+                             </tr>
                           ))}
                         </tbody>
-                      </table>
+                       </table>
                     ) : (
                       <div className="text-center py-8 text-gray-500 text-sm">No top products data available for this period.</div>
                     )}
@@ -690,26 +770,100 @@ const exportReportExcel = async () => {
                   </div>
                 )}
 
+                {/* VELOCITY TAB: Fast & Slow Moving Products */}
+                {activeTab === 'velocity' && currentData.allProducts && (
+                  <div className="space-y-6 max-h-96 overflow-y-auto">
+                    {/* Fast Moving Products */}
+                    <div>
+                      <div className="flex items-center gap-2 mb-3 sticky top-0 bg-white py-2">
+                        <Zap className="w-5 h-5 text-yellow-500" />
+                        <h4 className="font-semibold text-yellow-700">Fast Moving Products (≥ {velocityThreshold.fast} units/day)</h4>
+                      </div>
+                      <div className="space-y-2">
+                        {currentData.allProducts.filter(p => p.avgDailySales >= velocityThreshold.fast).slice(0, 5).map((product, idx) => (
+                          <div key={idx} className="bg-yellow-50 rounded-lg p-3">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <p className="font-medium">{product.productName}</p>
+                                <p className="text-xs text-gray-500">SKU: {product.sku} | Category: {product.category}</p>
+                                <p className="text-xs text-yellow-600 mt-1">
+                                  {product.totalQuantitySold} units sold | Avg {product.avgDailySales.toFixed(1)} units/day
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <p className="font-bold text-green-600">{formatCurrency(product.totalRevenue)}</p>
+                                <p className="text-xs text-gray-500">Current Stock: {product.currentStock}</p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        {currentData.allProducts.filter(p => p.avgDailySales >= velocityThreshold.fast).length === 0 && (
+                          <p className="text-sm text-gray-500 text-center py-4">No fast moving products found</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Slow Moving Products */}
+                    <div>
+                      <div className="flex items-center gap-2 mb-3 sticky top-0 bg-white py-2">
+                        <Snail className="w-5 h-5 text-blue-500" />
+                        <h4 className="font-semibold text-blue-700">Slow Moving Products (≤ {velocityThreshold.slow} units/day)</h4>
+                      </div>
+                      <div className="space-y-2">
+                        {currentData.allProducts.filter(p => p.avgDailySales <= velocityThreshold.slow && p.avgDailySales > 0).slice(0, 5).map((product, idx) => (
+                          <div key={idx} className="bg-blue-50 rounded-lg p-3">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <p className="font-medium">{product.productName}</p>
+                                <p className="text-xs text-gray-500">SKU: {product.sku} | Category: {product.category}</p>
+                                <p className="text-xs text-blue-600 mt-1">
+                                  {product.totalQuantitySold} units sold | Avg {product.avgDailySales.toFixed(1)} units/day
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <p className="font-bold text-orange-600">{formatCurrency(product.totalRevenue)}</p>
+                                <p className="text-xs text-gray-500">Stock Value: {formatCurrency(product.stockValue)}</p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        {currentData.allProducts.filter(p => p.avgDailySales <= velocityThreshold.slow && p.avgDailySales > 0).length === 0 && (
+                          <p className="text-sm text-gray-500 text-center py-4">No slow moving products found</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Non-Moving Products */}
+                    <div>
+                      <div className="flex items-center gap-2 mb-3 sticky top-0 bg-white py-2">
+                        <TrendingDown className="w-5 h-5 text-red-500" />
+                        <h4 className="font-semibold text-red-700">Non-Moving Products (0 units sold)</h4>
+                      </div>
+                      <div className="space-y-2">
+                        {currentData.allProducts.filter(p => p.avgDailySales === 0).slice(0, 5).map((product, idx) => (
+                          <div key={idx} className="bg-red-50 rounded-lg p-3">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <p className="font-medium">{product.productName}</p>
+                                <p className="text-xs text-gray-500">SKU: {product.sku} | Category: {product.category}</p>
+                                <p className="text-xs text-red-600 mt-1">No sales in this period</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="font-bold text-gray-500">KES 0.00</p>
+                                <p className="text-xs text-gray-500">Stock Value: {formatCurrency(product.stockValue)}</p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        {currentData.allProducts.filter(p => p.avgDailySales === 0).length === 0 && (
+                          <p className="text-sm text-gray-500 text-center py-4">All products have sales in this period</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* PROFIT TAB: Breakdown */}
-                {/* {activeTab === 'profit' && !loading && currentData && (
-  <div className="grid grid-cols-2 gap-4">
-    <div className="bg-blue-50 rounded-lg p-3">
-      <p className="text-xs text-gray-500">Profit Margin</p>
-<p className="text-lg font-semibold text-blue-700">
-  {currentData.summary?.netMargin 
-    ? currentData.summary.netMargin 
-    : `${parseFloat(currentData.profitMargin ?? 0).toFixed(2)}%`}
-</p>
-    </div>
-    <div className="bg-gray-50 rounded-lg p-3">
-      <p className="text-xs text-gray-500">Gross Profit</p>
-      <p className="text-lg font-semibold text-gray-700">
-        {formatCurrency(currentData.summary?.grossProfit ?? currentData.grossProfit)}
-      </p>
-    </div>
-  </div>
-)} */}
-{/* STOCK MOVEMENT TAB: Daily Data */}
                 {activeTab === 'profit' && stockMovementData?.data && (
                   <div className="overflow-y-auto max-h-64">
                     <table className="w-full text-sm">
