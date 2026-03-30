@@ -87,64 +87,114 @@ export default function Dashboard() {
     }
   }, [user]);
 
-  const fetchDashboardData = async () => {
+// Dashboard.jsx - Replace the fetchDashboardData function
+
+const fetchDashboardData = async () => {
+  try {
+    // ✅ NEW: Fetch lightweight stats from dedicated endpoint
+    const statsRes = await api.get('/products/dashboard/stats');
+    
+    if (!statsRes.data.success) {
+      throw new Error(statsRes.data.error || 'Failed to fetch stats');
+    }
+
+    const stats = statsRes.data.data;
+
+    // Optional: Still fetch today's sales if you need the list for other UI parts
+    // If you ONLY need the count/revenue, you can skip this call entirely!
+    let todaySalesList = [];
     try {
       const now = new Date();
       const startOfDay = new Date(now);
       startOfDay.setHours(0, 0, 0, 0);
       const endOfDay = new Date(now);
       endOfDay.setHours(23, 59, 59, 999);
-
-      const [salesRes, productsRes] = await Promise.all([
-        api.get(`/sales?startDate=${startOfDay.toISOString()}&endDate=${endOfDay.toISOString()}`),
-        api.get('/products?page=1&limit=1000')
-      ]);
-
-      const allSales = Array.isArray(salesRes.data.data) ? salesRes.data.data : [];
       
-      const totalProductsCount = productsRes.data.total; 
-      const allProducts = Array.isArray(productsRes.data.data) ? productsRes.data.data : [];
-
-      const isEmployee = user?.role === 'EMPLOYEE';
-      const locationId = user?.locationId;
-
-      const sales = isEmployee
-        ? allSales.filter(sale => sale.locationId === locationId)
-        : allSales;
-
-      const products = isEmployee
-        ? allProducts.filter(p => p.variants.some(v => v.locationId === locationId))
-        : allProducts;
-
-      const todayRevenue = sales.reduce((sum, sale) => sum + (sale.totalAmount || 0), 0);
-
-      let lowStockCount = 0;
-      products.forEach(product => {
-        const variants = isEmployee
-          ? product.variants.filter(v => v.locationId === locationId)
-          : product.variants;
-        variants.forEach(variant => {
-          if (variant.stockQuantity < 5) lowStockCount++;
-        });
-      });
-
-      const displayedTotalProducts = isEmployee 
-        ? products.length
-        : totalProductsCount;
-
-      setStats({
-        todaySales: sales.length,
-        todayRevenue,
-        lowStockItems: lowStockCount,
-        totalProducts: displayedTotalProducts
-      });
-    } catch (error) {
-      toast.error('Failed to load dashboard data');
-      console.error(error);
-    } finally {
-      setLoading(false);
+      const salesRes = await api.get(`/sales?startDate=${startOfDay.toISOString()}&endDate=${endOfDay.toISOString()}`);
+      todaySalesList = Array.isArray(salesRes.data.data) ? salesRes.data.data : [];
+    } catch (salesError) {
+      console.warn('Could not fetch sales list, using stats only:', salesError);
     }
-  };
+
+    // ✅ Use stats from backend (already filtered by role/location)
+    setStats({
+      todaySales: stats.todaySales, // or todaySalesList.length if you prefer client-side count
+      todayRevenue: stats.todayRevenue,
+      lowStockItems: stats.lowStockItems,
+      totalProducts: stats.totalProducts
+    });
+
+  } catch (error) {
+    console.error('Dashboard data error:', error);
+    
+    // Fallback: Try old method as last resort (remove this after testing)
+    if (error.response?.status === 404) {
+      console.log('Stats endpoint not found, falling back to old method...');
+      await fetchDashboardDataFallback();
+      return;
+    }
+    
+    toast.error('Failed to load dashboard data');
+  } finally {
+    setLoading(false);
+  }
+};
+
+// Optional: Keep old method as fallback during transition
+const fetchDashboardDataFallback = async () => {
+  try {
+    const now = new Date();
+    const startOfDay = new Date(now);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(now);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const [salesRes, productsRes] = await Promise.all([
+      api.get(`/sales?startDate=${startOfDay.toISOString()}&endDate=${endOfDay.toISOString()}`),
+      api.get('/products?page=1&limit=100') // Reduced from 1000 to 100
+    ]);
+
+    const allSales = Array.isArray(salesRes.data.data) ? salesRes.data.data : [];
+    const allProducts = Array.isArray(productsRes.data.data) ? productsRes.data.data : [];
+    const totalProductsCount = productsRes.data.total;
+
+    const isEmployee = user?.role === 'EMPLOYEE';
+    const locationId = user?.locationId;
+
+    const sales = isEmployee && locationId
+      ? allSales.filter(sale => sale.locationId === locationId)
+      : allSales;
+
+    const products = isEmployee && locationId
+      ? allProducts.filter(p => p.variants?.some(v => v.locationId === locationId))
+      : allProducts;
+
+    const todayRevenue = sales.reduce((sum, sale) => sum + (sale.totalAmount || 0), 0);
+
+    let lowStockCount = 0;
+    for (const product of products) {
+      const variants = isEmployee && locationId
+        ? (product.variants || []).filter(v => v.locationId === locationId)
+        : product.variants || [];
+      
+      for (const variant of variants) {
+        if (variant.stockQuantity < 5) lowStockCount++;
+      }
+    }
+
+    const displayedTotalProducts = isEmployee ? products.length : totalProductsCount;
+
+    setStats({
+      todaySales: sales.length,
+      todayRevenue,
+      lowStockItems: lowStockCount,
+      totalProducts: displayedTotalProducts
+    });
+  } catch (error) {
+    console.error('Fallback dashboard fetch error:', error);
+    toast.error('Failed to load dashboard data');
+  }
+};
 
   const statCards = [
     {
