@@ -288,12 +288,99 @@ export default function ReportsPage() {
 
   const currentData = getCurrentDisplayData();
 
+  // ReportsPage.jsx - Add this function
+
+const exportVelocityExcel = async () => {
+  try {
+    toast.loading('Generating Excel report...', { id: 'velocity-export' });
+    
+    const params = {};
+    
+    // Add period
+    if (useCustomRange && customStartDate && customEndDate) {
+      params.startDate = customStartDate;
+      params.endDate = customEndDate;
+    } else {
+      params.period = period;
+    }
+    
+    // Add location filter (only if admin and selected)
+    if (selectedLocation && isAdmin) {
+      params.locationId = selectedLocation;
+    }
+    
+    // Call the new endpoint
+    const response = await api.get('/products/export/product-velocity', { 
+      params,
+      responseType: 'blob', // Critical: tell axios to handle binary data
+      timeout: 60000 // 60 second timeout for large reports
+    });
+    
+    if (!response.data || response.data.size === 0) {
+      throw new Error('Empty response from server');
+    }
+    
+    // Create download link
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    
+    // Generate filename
+    const dateStr = new Date().toISOString().split('T')[0];
+    const locationSuffix = selectedLocation ? `-${selectedLocation}` : '-all-locations';
+    const periodSuffix = useCustomRange ? 'custom' : period;
+    link.setAttribute('download', `product-velocity-${periodSuffix}${locationSuffix}-${dateStr}.xlsx`);
+    
+    // Trigger download
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+    
+    toast.success('Excel report downloaded! 📊', { 
+      id: 'velocity-export',
+      duration: 4000 
+    });
+    
+  } catch (error) {
+    console.error('Velocity export error:', error);
+    
+    let errorMsg = 'Failed to export report';
+    if (error.response?.status === 401) {
+      errorMsg = 'Session expired. Please log in again.';
+    } else if (error.response?.status === 403) {
+      errorMsg = 'Permission denied. Admin access required.';
+    } else if (error.code === 'ECONNABORTED') {
+      errorMsg = 'Report generation timed out. Try a shorter date range.';
+    } else if (error.message) {
+      errorMsg = error.message;
+    }
+    
+    toast.error(errorMsg, { 
+      id: 'velocity-export',
+      duration: 6000 
+    });
+  }
+};
+
   return (
     <Sidebar>
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold text-gray-800">Reports & Analytics</h1>
+          {/* Export Button - Show for velocity tab */}
+  {activeTab === 'velocity' && (
+    <button 
+      className="btn-primary flex items-center gap-2 bg-green-600 hover:bg-green-700" 
+      onClick={exportVelocityExcel}
+      disabled={loading || !currentData}
+      title="Download full product velocity report as Excel"
+    >
+      <Download className="w-4 h-4" /> 
+      {loading ? 'Generating...' : 'Export Excel Report'}
+    </button>
+  )}
           {isAdmin && activeTab !== 'velocity' && (
             <button 
               className="btn-secondary flex items-center gap-2" 
