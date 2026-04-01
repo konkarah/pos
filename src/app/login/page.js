@@ -21,7 +21,7 @@ export default function LoginPage() {
       toast.success('Login successful!');
       router.push('/dashboard');
     } catch (error) {
-      toast.error(error.response?.data?.error || 'Login failed');
+      toast.error(error.message || 'Login failed', { duration: 4000 });
     } finally {
       setLoading(false);
     }
