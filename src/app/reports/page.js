@@ -370,7 +370,7 @@ const exportVelocityExcel = async () => {
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold text-gray-800">Reports & Analytics</h1>
           {/* Export Button - Show for velocity tab */}
-  {sAdmin && activeTab === 'velocity' && (
+  {Admin && activeTab === 'velocity' && (
     <button 
       className="btn-primary flex items-center gap-2 bg-green-600 hover:bg-green-700" 
       onClick={exportVelocityExcel}
