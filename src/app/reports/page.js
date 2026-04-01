@@ -423,6 +423,7 @@ const exportVelocityExcel = async () => {
                 Profit & Loss
               </button>
             )}
+            {isAdmin && (
             <button
               onClick={() => setActiveTab('velocity')}
               className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
@@ -432,6 +433,7 @@ const exportVelocityExcel = async () => {
               <Zap className="w-4 h-4" />
               Product Velocity
             </button>
+            )}
           </div>
 
           {/* Date Range & Filters */}
