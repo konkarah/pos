@@ -51,7 +51,7 @@ useEffect(() => {
     fetchData();
   }, 300);
   return () => clearTimeout(delay);
-}, [searchQuery, selectedLocation]);
+}, [searchQuery, selectedLocation, currentUser]);
 
 // 1. init
 useEffect(() => {
@@ -60,14 +60,6 @@ useEffect(() => {
   setSaleDate(now.toISOString().slice(0, 16)); 
 }, []);
 
-// 2. reactive fetch
-useEffect(() => {
-  const delay = setTimeout(() => {
-    fetchData();
-  }, 300);
-
-  return () => clearTimeout(delay);
-}, [searchQuery, selectedLocation]);
 
 //   const fetchData = async () => {
 //   try {
@@ -97,12 +89,13 @@ useEffect(() => {
 //   }
 // };
 const fetchData = async () => {
-  try {
-    // For employees, force their location; for admins, use selected or first
-    const locationToFetch = currentUser?.role === 'EMPLOYEE' 
-      ? currentUser.locationId 
-      : selectedLocation;
+  const locationToFetch = currentUser?.role === 'EMPLOYEE'
+    ? currentUser.locationId
+    : selectedLocation;
 
+  if (!locationToFetch) return;
+
+  try {
     const [productsRes, locationsRes] = await Promise.all([
       api.get(`/products?search=${searchQuery}&page=1&limit=20&locationId=${locationToFetch}`),
       api.get('/locations')
@@ -111,7 +104,6 @@ const fetchData = async () => {
     setProducts(Array.isArray(productsRes.data.data) ? productsRes.data.data : []);
     setLocations(locationsRes.data);
 
-    // Only auto-select for admins; employees are locked
     if (currentUser?.role !== 'EMPLOYEE' && !selectedLocation && locationsRes.data.length > 0) {
       setSelectedLocation(locationsRes.data[0].id);
     }
