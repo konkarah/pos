@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, AreaChart, Area } from 'recharts';
+// import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, AreaChart, Area } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell } from 'recharts';
 import { Download, Calendar, TrendingUp, TrendingDown, Package, Zap, Snail } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 import { useAuth } from '@/context/AuthContext';
@@ -29,6 +30,7 @@ export default function ReportsPage() {
     fast: 2,
     slow: 0.5
   });
+  const PAYMENT_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#6366f1'];
 
   useEffect(() => {
     if (user) {
@@ -168,6 +170,7 @@ export default function ReportsPage() {
       setFilteredReportData(productVelocityData);
       return;
     }
+    
 
     setFilteredReportData(filtered);
   };
@@ -213,6 +216,13 @@ export default function ReportsPage() {
           stockMovement: stockRes.data,
           profit: profitRes.data
         });
+        return;
+      }
+
+      if (activeTab === 'payments') {
+        const res = await api.get('/reports/payment-methods', { params });
+        setReportData(res.data);
+        setFilteredReportData(res.data);
         return;
       }
 
@@ -434,6 +444,14 @@ const exportVelocityExcel = async () => {
               Product Velocity
             </button>
             )}
+            <button
+            onClick={() => setActiveTab('payments')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              activeTab === 'payments' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            Payment Methods
+          </button>
           </div>
 
           {/* Date Range & Filters */}
@@ -728,6 +746,22 @@ const exportVelocityExcel = async () => {
                   </div>
                 </>
               )}
+              {activeTab === 'payments' && currentData?.summary && (
+                <>
+                  <div className="card bg-indigo-50 border-l-4 border-indigo-500">
+                    <p className="text-sm text-gray-600">Total Revenue</p>
+                    <p className="text-2xl font-bold text-indigo-700">{formatCurrency(currentData.summary.totalRevenue)}</p>
+                  </div>
+                  <div className="card bg-blue-50 border-l-4 border-blue-500">
+                    <p className="text-sm text-gray-600">Total Transactions</p>
+                    <p className="text-2xl font-bold text-blue-700">{currentData.summary.totalTransactions}</p>
+                  </div>
+                  <div className="card bg-gray-50 border-l-4 border-gray-400 col-span-2">
+                    <p className="text-sm text-gray-600">Payment Methods</p>
+                    <p className="text-2xl font-bold text-gray-700">{currentData.combined?.length || 0} methods used</p>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Charts & Details */}
@@ -785,7 +819,28 @@ const exportVelocityExcel = async () => {
                         <Bar yAxisId="left" dataKey="count" fill="#8884d8" name="Number of Products" />
                         <Bar yAxisId="right" dataKey="revenue" fill="#82ca9d" name="Revenue" />
                       </BarChart>
-                    ) : (
+                    ) : activeTab === 'payments' && currentData?.combined ? (
+          <PieChart>
+            <Pie
+              data={currentData.combined}
+              cx="50%"
+              cy="50%"
+              innerRadius={60}
+              outerRadius={80}
+              paddingAngle={5}
+              dataKey="totalRevenue"
+              nameKey="paymentMethod"
+              label={({ paymentMethod, percent }) => `${paymentMethod} (${(percent * 100).toFixed(0)}%)`}
+              labelLine={true}
+            >
+              {currentData.combined.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={PAYMENT_COLORS[index % PAYMENT_COLORS.length]} />
+              ))}
+            </Pie>
+            <Tooltip formatter={(value) => formatCurrency(value)} />
+            <Legend />
+          </PieChart>
+        ) :(
                       <div className="flex items-center justify-center h-full text-gray-400">No chart data available</div>
                     )}
                   </ResponsiveContainer>
@@ -981,6 +1036,74 @@ const exportVelocityExcel = async () => {
                     </table>
                   </div>
                 )}
+
+    {activeTab === 'payments' && currentData?.combined && (
+      <>
+        {/* Summary Cards Row - Already showing at top, but add quick stats */}
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="bg-gradient-to-r from-indigo-50 to-indigo-100 rounded-lg p-3 text-center">
+            <p className="text-2xl font-bold text-indigo-700">{currentData.combined.length}</p>
+            <p className="text-xs text-gray-600">Payment Methods</p>
+          </div>
+          <div className="bg-gradient-to-r from-emerald-50 to-emerald-100 rounded-lg p-3 text-center">
+            <p className="text-2xl font-bold text-emerald-700">{currentData.summary?.totalTransactions || 0}</p>
+            <p className="text-xs text-gray-600">Total Transactions</p>
+          </div>
+        </div>
+
+        {/* Combined breakdown as cards */}
+        <div className="space-y-2 max-h-96 overflow-y-auto">
+          <p className="text-sm font-medium text-gray-700 mb-2">All Locations Combined</p>
+          {currentData.combined.map((item, idx) => (
+            <div key={idx} className="flex justify-between items-center p-3 rounded-lg border" style={{ borderLeftColor: PAYMENT_COLORS[idx % PAYMENT_COLORS.length], borderLeftWidth: '4px' }}>
+              <div>
+                <p className="font-semibold text-gray-800">{item.paymentMethod}</p>
+                <p className="text-xs text-gray-500">{item.transactionCount} transaction{item.transactionCount !== 1 ? 's' : ''}</p>
+              </div>
+              <div className="text-right">
+                <p className="font-bold text-indigo-700">{formatCurrency(item.totalRevenue)}</p>
+                <p className="text-xs text-gray-400">
+                  {((item.totalRevenue / currentData.summary.totalRevenue) * 100).toFixed(1)}% of total
+                </p>
+              </div>
+            </div>
+          ))}
+          {currentData.combined.length === 0 && (
+            <p className="text-center text-gray-500 py-8 text-sm">No sales in this period.</p>
+          )}
+        </div>
+
+        {/* Per-location breakdown - Collapsible or smaller view */}
+        {currentData.byLocation && currentData.byLocation.length > 0 && (
+          <div className="mt-6 pt-4 border-t">
+            <details className="group">
+              <summary className="flex items-center justify-between cursor-pointer list-none">
+                <span className="text-sm font-medium text-gray-700">Breakdown by Location</span>
+                <span className="text-gray-400 group-open:rotate-180 transition-transform">▼</span>
+              </summary>
+              <div className="mt-3 space-y-4 max-h-80 overflow-y-auto">
+                {currentData.byLocation.map((loc, idx) => (
+                  <div key={idx} className="bg-gray-50 rounded-lg p-3">
+                    <p className="font-semibold text-gray-700 mb-2 text-sm">{loc.locationName}</p>
+                    <div className="space-y-2">
+                      {loc.methods.map((method, mIdx) => (
+                        <div key={mIdx} className="flex justify-between items-center text-sm pl-2">
+                          <div>
+                            <span className="text-gray-700">{method.paymentMethod}</span>
+                            <span className="text-xs text-gray-400 ml-2">({method.transactionCount} txns)</span>
+                          </div>
+                          <span className="font-medium text-indigo-600">{formatCurrency(method.totalRevenue)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </details>
+          </div>
+        )}
+      </>
+    )}
               </div>
             </div>
           </div>
