@@ -464,6 +464,7 @@ const handleClearFilters = () => {
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Customer</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Payment</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Items Sold</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Buy Cost</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Total</th>
                 {user?.role === 'ADMIN' && (
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Actions</th>
@@ -473,7 +474,7 @@ const handleClearFilters = () => {
             <tbody className="divide-y">
               {sales.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="px-4 py-8 text-center text-gray-500">
+                  <td colSpan="9" className="px-4 py-8 text-center text-gray-500">
                     No sales found matching your filters.
                   </td>
                 </tr>
@@ -502,6 +503,12 @@ const handleClearFilters = () => {
                     </td>
                     <td className="px-4 py-3">
                       {renderItems(sale.items)}
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">
+                      {formatCurrency(
+                        sale.items.reduce((sum, item) => 
+                          sum + (item.productVariant.product.buyPrice * item.quantity), 0)
+                      )}
                     </td>
                     <td className="px-4 py-3 font-bold text-gray-800">
                       {formatCurrency(sale.totalAmount)}
