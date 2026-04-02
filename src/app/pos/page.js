@@ -51,7 +51,7 @@ useEffect(() => {
 
   const delay = setTimeout(() => {
     fetchData();
-  }, 300);
+  }, 500);
 
   return () => clearTimeout(delay);
 }, [searchQuery, selectedLocation, currentUser]);
