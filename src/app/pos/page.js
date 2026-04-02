@@ -47,11 +47,19 @@ export default function POSPage() {
 
 // Update fetchData to respect employee location lock
 useEffect(() => {
+  if (!currentUser) return; // wait for user to load before any fetch
+
   const delay = setTimeout(() => {
     fetchData();
   }, 300);
+
   return () => clearTimeout(delay);
 }, [searchQuery, selectedLocation, currentUser]);
+useEffect(() => {
+  if (currentUser?.role !== 'EMPLOYEE' && locations.length > 0 && !selectedLocation) {
+    setSelectedLocation(locations[0].id);
+  }
+}, [locations, currentUser]);
 
 // 1. init
 useEffect(() => {
@@ -61,57 +69,53 @@ useEffect(() => {
 }, []);
 
 
-  const fetchData = async () => {
-  try {
-    const [productsRes, locationsRes] = await Promise.all([
-      api.get(
-        `/products?search=${searchQuery}&page=1&limit=20&locationId=${selectedLocation}`
-      ),
-      api.get('/locations')
-    ]);
-
-    setProducts(
-      Array.isArray(productsRes.data.data)
-        ? productsRes.data.data
-        : []
-    );
-
-    setLocations(locationsRes.data);
-
-    // only set location once (avoid infinite refetch)
-    if (!selectedLocation && locationsRes.data.length > 0) {
-      setSelectedLocation(locationsRes.data[0].id);
-    }
-
-  } catch (error) {
-    toast.error('Failed to load data');
-    console.error(error);
-  }
-};
-// const fetchData = async () => {
-//   const locationToFetch = currentUser?.role === 'EMPLOYEE'
-//     ? currentUser.locationId
-//     : selectedLocation;
-
-//   if (!locationToFetch) return;
-
+//   const fetchData = async () => {
 //   try {
 //     const [productsRes, locationsRes] = await Promise.all([
-//       api.get(`/products?search=${searchQuery}&page=1&limit=20&locationId=${locationToFetch}`),
+//       api.get(
+//         `/products?search=${searchQuery}&page=1&limit=20&locationId=${selectedLocation}`
+//       ),
 //       api.get('/locations')
 //     ]);
 
-//     setProducts(Array.isArray(productsRes.data.data) ? productsRes.data.data : []);
+//     setProducts(
+//       Array.isArray(productsRes.data.data)
+//         ? productsRes.data.data
+//         : []
+//     );
+
 //     setLocations(locationsRes.data);
 
-//     if (currentUser?.role !== 'EMPLOYEE' && !selectedLocation && locationsRes.data.length > 0) {
+//     // only set location once (avoid infinite refetch)
+//     if (!selectedLocation && locationsRes.data.length > 0) {
 //       setSelectedLocation(locationsRes.data[0].id);
 //     }
+
 //   } catch (error) {
 //     toast.error('Failed to load data');
 //     console.error(error);
 //   }
 // };
+const fetchData = async () => {
+  const locationId =
+    currentUser?.role === 'EMPLOYEE'
+      ? currentUser.locationId
+      : selectedLocation; // empty string = fetch all (backend handles it)
+
+  try {
+    const [productsRes, locationsRes] = await Promise.all([
+      api.get(`/products?search=${searchQuery}&page=1&limit=20&locationId=${locationId}`),
+      api.get('/locations')
+    ]);
+
+    setProducts(Array.isArray(productsRes.data.data) ? productsRes.data.data : []);
+    setLocations(locationsRes.data);
+    // ← removed the setSelectedLocation call that was causing extra fetches
+  } catch (error) {
+    toast.error('Failed to load data');
+    console.error(error);
+  }
+};
 const filteredProducts = products.filter(product => {
   if (!selectedLocation) return false;
 
