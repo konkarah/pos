@@ -483,6 +483,7 @@ const filteredProducts = products.filter(product => {
                         <option value="Paybill dtb">Paybill DTB</option>
                         <option value="Paybill coop">Paybill COOP</option>
                         <option value="Paybill kcb">Paybill KCB</option>
+                        <option value="Paybill absa">Paybill ABSA</option>
                         <option value="Buy Goods Till">Buy Goods Till</option>
                         <option value="mpesa">MPESA (Personal Number)</option>
                       </select>
