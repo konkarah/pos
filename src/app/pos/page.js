@@ -104,7 +104,7 @@ const fetchData = async () => {
 
   try {
     const [productsRes, locationsRes] = await Promise.all([
-      api.get(`/products?search=${searchQuery}&page=1&limit=20&locationId=${locationId}`),
+      api.get(`/products?search=${encodeURIComponent(searchQuery)}&page=1&limit=20&locationId=${selectedLocation}`),
       api.get('/locations')
     ]);
 
