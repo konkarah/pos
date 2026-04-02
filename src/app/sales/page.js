@@ -67,11 +67,11 @@ const [endDate, setEndDate] = useState('');
       }
     }
   }, [user]);
-
-  useEffect(() => {
-    fetchData();
-    fetchSummary();
-}, [page, debouncedSearch, filterLocation, startDate, endDate]);
+useEffect(() => {
+  if (user === undefined) return;
+  fetchData();
+  fetchSummary();
+}, [page, debouncedSearch, filterLocation, startDate, endDate, user]);
 
 const fetchData = async () => {
   try {
@@ -97,11 +97,14 @@ const fetchData = async () => {
       params.append('endDate', endOfDay.toISOString());
     }
     
+    // let locationToFilter = filterLocation;
+    // if (!isAdmin && userLocationId) {
+    //   locationToFilter = userLocationId;
+    // }
     let locationToFilter = filterLocation;
-    if (!isAdmin && userLocationId) {
-      locationToFilter = userLocationId;
+    if (user?.role !== 'ADMIN' && user?.locationId) {
+      locationToFilter = user.locationId;
     }
-    
     if (locationToFilter) {
       params.append('locationId', locationToFilter);
     }
@@ -161,9 +164,13 @@ const fetchSummary = async () => {
       params.append('endDate', endOfDay.toISOString());
     }
     
+    // let locationToFilter = filterLocation;
+    // if (!isAdmin && userLocationId) {
+    //   locationToFilter = userLocationId;
+    // }
     let locationToFilter = filterLocation;
-    if (!isAdmin && userLocationId) {
-      locationToFilter = userLocationId;
+    if (user?.role !== 'ADMIN' && user?.locationId) {
+      locationToFilter = user.locationId;
     }
     
     if (locationToFilter) {
