@@ -170,7 +170,22 @@ export default function ReportsPage() {
       setFilteredReportData(productVelocityData);
       return;
     }
-    
+    if (activeTab === 'payments' && filtered.combined) {
+  // Backend already filters sales by location, but ensure frontend consistency for byLocation display
+  if (selectedLocation && filtered.byLocation) {
+    filtered.byLocation = filtered.byLocation.filter(
+      loc => loc.locationId === selectedLocation
+    );
+  }
+  
+  // Recalculate summary from filtered combined data (safety check)
+  if (selectedLocation && !isAdmin) {
+    filtered.summary = {
+      totalRevenue: filtered.combined.reduce((sum, item) => sum + item.totalRevenue, 0),
+      totalTransactions: filtered.combined.reduce((sum, item) => sum + item.transactionCount, 0)
+    };
+  }
+}
 
     setFilteredReportData(filtered);
   };
@@ -219,12 +234,26 @@ export default function ReportsPage() {
         return;
       }
 
-      if (activeTab === 'payments') {
-        const res = await api.get('/reports/payment-methods', { params });
-        setReportData(res.data);
-        setFilteredReportData(res.data);
-        return;
+    if (activeTab === 'payments') {
+      const params = {};
+      
+      if (useCustomRange && customStartDate && customEndDate) {
+        params.startDate = customStartDate;
+        params.endDate = customEndDate;
+      } else {
+        params.period = period;
       }
+      
+      // Only send locationId if admin selected one, OR if user is non-admin (backend will enforce)
+      if (selectedLocation) {
+        params.locationId = selectedLocation;
+      }
+      
+      const res = await api.get('/reports/payment-methods', { params });
+      setReportData(res.data);
+      setFilteredReportData(res.data);
+      return;
+    }
 
       // Other Tabs
       let endpoint = '';
