@@ -124,7 +124,8 @@ const fetchData = async () => {
     
     // ✅ Add date filters
     if (startDate) {
-      params.append('startDate', new Date(startDate).toISOString());
+      params.append('startDate', startDate);
+params.append('endDate', endDate);
     }
     if (endDate) {
       // Include the entire end day (up to 23:59:59)
