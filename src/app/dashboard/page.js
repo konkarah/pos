@@ -87,6 +87,22 @@ export default function Dashboard() {
     }
   }, [user]);
 
+  const getNairobiDayRange = () => {
+  const now = new Date();
+
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date(now);
+  end.setHours(23, 59, 59, 999);
+
+  // shift to UTC manually (-3 hours)
+  const startUTC = new Date(start.getTime() - (3 * 60 * 60 * 1000));
+  const endUTC = new Date(end.getTime() - (3 * 60 * 60 * 1000));
+
+  return { startUTC, endUTC };
+};
+
 // Dashboard.jsx - Replace the fetchDashboardData function
 
 const fetchDashboardData = async () => {
@@ -109,8 +125,9 @@ const fetchDashboardData = async () => {
       startOfDay.setHours(0, 0, 0, 0);
       const endOfDay = new Date(now);
       endOfDay.setHours(23, 59, 59, 999);
+      const { startUTC, endUTC } = getNairobiDayRange();
       
-      const salesRes = await api.get(`/sales?startDate=${startOfDay.toISOString()}&endDate=${endOfDay.toISOString()}`);
+      const salesRes = await api.get(`/sales?startDate=${startUTC.toISOString()}&endDate=${endUTC.toISOString()}`);
       todaySalesList = Array.isArray(salesRes.data.data) ? salesRes.data.data : [];
     } catch (salesError) {
       console.warn('Could not fetch sales list, using stats only:', salesError);
@@ -149,8 +166,10 @@ const fetchDashboardDataFallback = async () => {
     const endOfDay = new Date(now);
     endOfDay.setHours(23, 59, 59, 999);
 
+    const { startUTC, endUTC } = getNairobiDayRange();
+
     const [salesRes, productsRes] = await Promise.all([
-      api.get(`/sales?startDate=${startOfDay.toISOString()}&endDate=${endOfDay.toISOString()}`),
+      api.get(`/sales?startDate=${startUTC.toISOString()}&endDate=${endUTC.toISOString()}`),
       api.get('/products?page=1&limit=100') // Reduced from 1000 to 100
     ]);
 
