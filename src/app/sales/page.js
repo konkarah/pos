@@ -483,7 +483,11 @@ const handleClearFilters = () => {
                   <tr key={sale.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-mono text-sm text-gray-800">{sale.receiptNumber}</td>
                     <td className="px-4 py-3 text-gray-600">
-                      {new Date(sale.createdAt).toLocaleDateString()} <br/>
+                      {new Date(sale.createdAt).toLocaleString('en-KE', {
+                        timeZone: 'Africa/Nairobi',
+                        dateStyle: 'medium',
+                        timeStyle: 'short'
+                      })} <br/>
                       <span className="text-xs text-gray-400">
                         {new Date(sale.createdAt).toLocaleTimeString()}
                       </span>
