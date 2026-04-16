@@ -65,7 +65,7 @@ useEffect(() => {
 useEffect(() => {
   const now = new Date();
   now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-  setSaleDate(now.toISOString().slice(0, 16)); 
+  // setSaleDate(now.toISOString().slice(0, 16)); 
 }, []);
 
 
