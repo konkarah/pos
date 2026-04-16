@@ -267,9 +267,9 @@ const filteredProducts = products.filter(product => {
       setCustomerPhone('');
       
       // Reset date to now or keep the selected one? Usually reset to now.
-      const nowReset = new Date();
-      nowReset.setMinutes(nowReset.getMinutes() - nowReset.getTimezoneOffset());
-      setSaleDate(nowReset.toISOString().slice(0, 16));
+      // const nowReset = new Date();
+      // nowReset.setMinutes(nowReset.getMinutes() - nowReset.getTimezoneOffset());
+      // setSaleDate(nowReset.toISOString().slice(0, 16));
       
       fetchData();
     } catch (error) {
