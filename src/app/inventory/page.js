@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
-import { Plus, Edit, Trash2, RefreshCw } from 'lucide-react';
+import { Plus, Edit, Trash2, RefreshCw, Download, Filter, X } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 
 export default function InventoryPage() {
@@ -22,6 +22,14 @@ export default function InventoryPage() {
     categoryId: '',
     variants: [{ locationId: '', stockQuantity: 0 }]
   });
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportOptions, setExportOptions] = useState({
+  locationId: '',
+  stockStatus: 'all',
+  includeAllLocations: false,
+  includeSearch: true
+});
+const [isExporting, setIsExporting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -284,6 +292,71 @@ const fetchData = async () => {
       </Sidebar>
     );
   }
+const handleExportExcel = async () => {
+  setIsExporting(true);
+  try {
+    toast.loading('Preparing Excel file...', { id: 'export' });
+    
+    // Build query params with export options
+    const params = new URLSearchParams();
+    
+    // Include current search if option is enabled
+    if (exportOptions.includeSearch && debouncedSearch) {
+      params.append('search', debouncedSearch);
+    }
+    
+    // Location filter (only for admins)
+    if (isAdmin && exportOptions.locationId) {
+      params.append('locationId', exportOptions.locationId);
+    }
+    
+    // Stock status filter
+    if (exportOptions.stockStatus !== 'all') {
+      params.append('stockStatus', exportOptions.stockStatus);
+    }
+    
+    // Whether to include all locations in separate rows
+    if (exportOptions.includeAllLocations) {
+      params.append('includeAllLocations', 'true');
+    }
+    
+    // Fetch the Excel file
+    const response = await api.get(`/products/export-excel?${params.toString()}`, {
+      responseType: 'blob'
+    });
+    
+    // Create download link
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    
+    // Generate filename with applied filters
+    const filters = [];
+    if (exportOptions.locationId) {
+      const location = locations.find(l => l.id === exportOptions.locationId);
+      filters.push(location?.name || 'location');
+    }
+    if (exportOptions.stockStatus !== 'all') {
+      filters.push(exportOptions.stockStatus === 'in-stock' ? 'in-stock' : 'out-of-stock');
+    }
+    const filterSuffix = filters.length ? `_${filters.join('_')}` : '';
+    const filename = `products${filterSuffix}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    link.setAttribute('download', filename);
+    
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+    
+    toast.success('Export completed!', { id: 'export' });
+    setShowExportModal(false);
+  } catch (error) {
+    console.error('Export failed:', error);
+    toast.error('Failed to export products', { id: 'export' });
+  } finally {
+    setIsExporting(false);
+  }
+};
 
   return (
     <Sidebar>
@@ -291,10 +364,24 @@ const fetchData = async () => {
         <div className="max-w-7xl mx-auto">
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-3xl font-bold text-gray-800">Inventory</h1>
-            <button onClick={() => setShowModal(true)} className="btn-primary flex items-center gap-2">
-              <Plus className="w-5 h-5" />
-              Add Product
-            </button>
+<div className="flex justify-between items-center mb-6">
+  <div className="flex gap-3">
+    <button 
+      onClick={() => setShowExportModal(true)} 
+      className="btn-secondary flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white"
+    >
+      <Download className="w-5 h-5" />
+      Export Excel
+    </button>
+    <button 
+      onClick={() => setShowModal(true)} 
+      className="btn-primary flex items-center gap-2"
+    >
+      <Plus className="w-5 h-5" />
+      Add Product
+    </button>
+  </div>
+</div>
           </div>
 
           <div className="card overflow-x-auto">
@@ -340,6 +427,125 @@ const fetchData = async () => {
     </span>
   )}
 </div>
+{showExportModal && (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <div className="bg-white rounded-lg p-6 max-w-md w-full">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-bold">Export Products</h2>
+        <button onClick={() => setShowExportModal(false)} className="text-gray-500 hover:text-gray-700">
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+      
+      <div className="space-y-4">
+        {/* Location Filter */}
+        {isAdmin && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Filter by Branch
+            </label>
+            <select
+              value={exportOptions.locationId}
+              onChange={(e) => setExportOptions({...exportOptions, locationId: e.target.value})}
+              className="input-field"
+            >
+              <option value="">All Branches</option>
+              {locations.map(loc => (
+                <option key={loc.id} value={loc.id}>{loc.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+        
+        {/* Stock Status Filter */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Stock Status
+          </label>
+          <select
+            value={exportOptions.stockStatus}
+            onChange={(e) => setExportOptions({...exportOptions, stockStatus: e.target.value})}
+            className="input-field"
+          >
+            <option value="all">All Products</option>
+            <option value="in-stock">In Stock Only</option>
+            <option value="out-of-stock">Out of Stock Only</option>
+          </select>
+        </div>
+        
+        {/* Include Search */}
+        {debouncedSearch && (
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              id="includeSearch"
+              checked={exportOptions.includeSearch}
+              onChange={(e) => setExportOptions({...exportOptions, includeSearch: e.target.checked})}
+              className="mr-2"
+            />
+            <label htmlFor="includeSearch" className="text-sm text-gray-700">
+              Include current search filter: "{debouncedSearch}"
+            </label>
+          </div>
+        )}
+        
+        {/* Include All Locations */}
+        {isAdmin && (
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              id="includeAllLocations"
+              checked={exportOptions.includeAllLocations}
+              onChange={(e) => setExportOptions({...exportOptions, includeAllLocations: e.target.checked})}
+              className="mr-2"
+            />
+            <label htmlFor="includeAllLocations" className="text-sm text-gray-700">
+              Show each branch's stock in separate rows
+            </label>
+          </div>
+        )}
+        
+        {/* Preview info */}
+        <div className="bg-gray-50 p-3 rounded-lg text-sm text-gray-600">
+          <p className="font-medium mb-1">Export will include:</p>
+          <ul className="list-disc list-inside space-y-1">
+            <li>SKU, product name, category</li>
+            <li>Buy & sell prices</li>
+            {exportOptions.includeAllLocations && <li>Branch/location column</li>}
+            {!exportOptions.includeAllLocations && <li>Stock summary by branch</li>}
+            <li>Date created</li>
+          </ul>
+        </div>
+      </div>
+      
+      <div className="flex gap-3 mt-6">
+        <button
+          onClick={handleExportExcel}
+          disabled={isExporting}
+          className="btn-primary flex-1 flex items-center justify-center gap-2"
+        >
+          {isExporting ? (
+            <>
+              <RefreshCw className="w-4 h-4 animate-spin" />
+              Exporting...
+            </>
+          ) : (
+            <>
+              <Download className="w-4 h-4" />
+              Export Now
+            </>
+          )}
+        </button>
+        <button
+          onClick={() => setShowExportModal(false)}
+          className="btn-secondary flex-1"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+)}
               
               {/* Show info for employees */}
               {!isAdmin && (
@@ -623,8 +829,11 @@ const fetchData = async () => {
               </div>
             </div>
           )}
+          
         </div>
+        
       </div>
     </Sidebar>
+    
   );
 }
