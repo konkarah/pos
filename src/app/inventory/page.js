@@ -373,13 +373,15 @@ const handleExportExcel = async () => {
       <Download className="w-5 h-5" />
       Export Excel
     </button>
-    <button 
-      onClick={() => setShowModal(true)} 
-      className="btn-primary flex items-center gap-2"
-    >
-      <Plus className="w-5 h-5" />
-      Add Product
-    </button>
+    {isAdmin && (
+      <button
+        onClick={() => setShowModal(true)}
+        className="btn-primary flex items-center gap-2"
+      >
+        <Plus className="w-5 h-5" />
+        Add Product
+      </button>
+    )}
   </div>
 </div>
           </div>
