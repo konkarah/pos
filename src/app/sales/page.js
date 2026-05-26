@@ -631,6 +631,7 @@ const handleClearFilters = () => {
                   <option value="Paybill absa">Paybill ABSA</option>
                   <option value="Buy Goods Till">Buy Goods Till</option>
                   <option value="mpesa">MPESA (Personal Number)</option>
+                  <option value="loop paybill">Loop Paybill</option>
                 </select>
               </div>
               <div>
