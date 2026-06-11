@@ -397,7 +397,6 @@ const handleExportExcel = async () => {
               />
               
               {/* Location filter - only show for admins */}
-              {isAdmin && (
                 <select
                   value={selectedLocation}
                   onChange={handleLocationChange}
@@ -408,8 +407,6 @@ const handleExportExcel = async () => {
                     <option key={loc.id} value={loc.id}>{loc.name}</option>
                   ))}
                 </select>
-                
-              )}
               {/* Stock Filter Dropdown */}
 <div className="flex items-center gap-2 mb-4">
   <label className="text-sm text-gray-600">Stock:</label>
