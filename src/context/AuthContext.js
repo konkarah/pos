@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useRef } from 'react';
 import api from '@/lib/api';
 import { useRouter } from 'next/navigation';
 
@@ -10,6 +10,30 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const logoutTimer = useRef(null);
+
+  const getTokenExpMs = (token) => {
+    try {
+      const payload = JSON.parse(
+        atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))
+      );
+      return payload.exp ? payload.exp * 1000 : null; // exp is in seconds
+    } catch {
+      return null;
+    }
+  };
+
+  const scheduleAutoLogout = (token) => {
+    if (logoutTimer.current) clearTimeout(logoutTimer.current);
+    const expMs = getTokenExpMs(token);
+    if (!expMs) return;
+    const delay = expMs - Date.now();
+    if (delay <= 0) {
+      logout();
+    } else {
+      logoutTimer.current = setTimeout(() => logout(), delay);
+    }
+  };
 
 useEffect(() => {
   const initAuth = async () => {
@@ -21,8 +45,9 @@ useEffect(() => {
     }
 
     try {
-      const res = await api.get('/auth/me'); // create this endpoint
+      const res = await api.get('/auth/me');
       setUser(res.data);
+      scheduleAutoLogout(token);
     } catch (error) {
       // invalid/expired token
       localStorage.removeItem('token');
@@ -34,6 +59,9 @@ useEffect(() => {
   };
 
   initAuth();
+      return () => {
+      if (logoutTimer.current) clearTimeout(logoutTimer.current);
+    };
 }, []);
 
 const login = async (username, password) => {
@@ -44,6 +72,7 @@ const login = async (username, password) => {
     localStorage.setItem('token', token);
     localStorage.setItem('user', JSON.stringify(user));
     setUser(user);
+    scheduleAutoLogout(token); 
 
     return user;
   } catch (error) {
@@ -53,6 +82,7 @@ const login = async (username, password) => {
 };
 
   const logout = () => {
+     if (logoutTimer.current) clearTimeout(logoutTimer.current); 
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setUser(null);

@@ -35,11 +35,17 @@ api.interceptors.response.use(
       stopLoading();
     }
 
-  if (error.response?.status === 401 && !error.config?.url?.includes('/auth/login')) {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    window.location.href = '/login';
-  }
+    const status = error.response?.status;
+    const msg = error.response?.data?.error || '';
+    // 401 = missing token; 403 with a token message = expired/invalid.
+    // (403 "Insufficient permissions" is deliberately NOT treated as a logout.)
+    const isAuthError = status === 401 || (status === 403 && /token/i.test(msg));
+
+    if (isAuthError && !error.config?.url?.includes('/auth/login')) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
+    }
 
     return Promise.reject(error);
   }
